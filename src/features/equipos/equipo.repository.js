@@ -1,0 +1,27 @@
+'use strict';
+const { Equipo } = require('./equipo.schema');
+
+class EquipoRepository {
+  async findAll() { return Equipo.find().lean(); }
+  async findById(id) { return Equipo.findById(id).lean(); }
+  async findByCodigo(codigo) { return Equipo.findOne({ codigo_inventario: codigo }).lean(); }
+  async findByCodigoBarras(cb) { return Equipo.findOne({ codigo_barras: cb }).lean(); }
+  async findDisponibles() { return Equipo.find({ estado: 'activo' }).lean(); }
+
+  async create(data) { return (await Equipo.create(data)).toObject(); }
+
+  async update(id, updates) {
+    return Equipo.findByIdAndUpdate(
+      id,
+      { $set: { ...updates, fecha_actualizacion: new Date() } },
+      { new: true }
+    ).lean();
+  }
+
+  async countByCodigo(codigoBase) {
+    const regex = new RegExp(`^${codigoBase}-`, 'i');
+    return Equipo.countDocuments({ codigo_inventario: regex });
+  }
+}
+
+module.exports = new EquipoRepository();
