@@ -1,0 +1,28 @@
+'use strict';
+const { Router } = require('express');
+const { z } = require('zod');
+const llaveController = require('./llave.controller');
+const { requireAuth } = require('../auth/auth.middleware');
+const { validate } = require('../../shared/middlewares/validate.middleware');
+
+const router = Router();
+
+const entregarSchema = z.object({
+  nroidenti: z.string().min(1, 'Documento requerido'),
+  profesor: z.string().min(1, 'Profesor requerido'),
+  aula: z.string().min(1, 'Aula requerida'),
+  horario: z.string().optional().default(''),
+  dia: z.string().optional().default(''),
+  facultad: z.string().optional().default('No especificada'),
+  materia: z.string().optional().default(''),
+});
+
+router.get('/pendientes', ...requireAuth, (req, res) => llaveController.pendientes(req, res));
+router.get('/dia', ...requireAuth, (req, res) => llaveController.pendientesHoy(req, res));
+router.get('/historial', ...requireAuth, (req, res) => llaveController.historial(req, res));
+router.get('/historial/exportar', ...requireAuth, (req, res) => llaveController.exportarHistorial(req, res));
+router.get('/clases-hoy', ...requireAuth, (req, res) => llaveController.clasesProcesadasHoy(req, res));
+router.post('/entregar', ...requireAuth, validate(entregarSchema), (req, res) => llaveController.entregar(req, res));
+router.post('/devolver/:documento', ...requireAuth, (req, res) => llaveController.devolver(req, res));
+
+module.exports = router;
