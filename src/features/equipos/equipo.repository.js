@@ -19,7 +19,8 @@ class EquipoRepository {
   }
 
   async countByCodigo(codigoBase) {
-    const regex = new RegExp(`^${codigoBase}-`, 'i');
+    const escaped = String(codigoBase).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`^${escaped}-`, 'i');
     return Equipo.countDocuments({ codigo_inventario: regex });
   }
 }
