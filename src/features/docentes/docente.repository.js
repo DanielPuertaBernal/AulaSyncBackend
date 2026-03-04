@@ -19,7 +19,8 @@ class DocenteRepository {
   }
 
   async search(query) {
-    const regex = new RegExp(query, 'i');
+    const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escaped, 'i');
     return Docente.find({
       $or: [
         { 'Numero de documento': regex },
