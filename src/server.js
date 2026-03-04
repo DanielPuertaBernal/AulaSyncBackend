@@ -12,7 +12,18 @@ const nfcGateway = require('./shared/websocket/nfc.gateway');
 
 const PORT = process.env.PORT || 3001;
 
+const REQUIRED_ENV = ['MONGO_URI', 'MONGO_DB', 'JWT_SECRET', 'JWT_REFRESH_SECRET'];
+
+function validateEnv() {
+  const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
+  if (missing.length) {
+    throw new Error(`Variables de entorno requeridas no definidas: ${missing.join(', ')}`);
+  }
+}
+
 async function bootstrap() {
+  validateEnv();
+
   // 1. Conectar MongoDB
   await mongoClient.connect();
 

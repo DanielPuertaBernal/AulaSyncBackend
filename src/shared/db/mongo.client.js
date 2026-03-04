@@ -15,10 +15,6 @@ class MongoClient {
 
     const uri = process.env.MONGO_URI;
     const dbName = process.env.MONGO_DB;
-
-    if (!uri) throw new Error('MONGO_URI no definida en variables de entorno');
-    if (!dbName) throw new Error('MONGO_DB no definida en variables de entorno');
-
     const password = process.env.MONGO_PASSWORD;
     const connectionUri = password
       ? uri.replace('<password>', encodeURIComponent(password))
