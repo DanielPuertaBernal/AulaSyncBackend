@@ -14,22 +14,18 @@ class MongoClient {
     if (this._connection) return this._connection;
 
     const uri = process.env.MONGO_URI;
-    const password = encodeURIComponent(process.env.MONGO_PASSWORD);
     const dbName = process.env.MONGO_DB;
 
-    // Insertar contraseña en el URI si tiene el placeholder
-    let connectionUri = uri.replace('://', `://${process.env.MONGO_URI.includes('@') ? '' : ''}`)
-      .replace('mongodb+srv://', `mongodb+srv://DanielPB:${password}@`)
-      .replace('DanielPB:' + password + '@DanielPB@', `DanielPB:${password}@`);
+    if (!uri) throw new Error('MONGO_URI no definida en variables de entorno');
+    if (!dbName) throw new Error('MONGO_DB no definida en variables de entorno');
 
-    // Forma segura: reemplazar usuario sin password por usuario:password
-    const uriConPassword = uri.replace(
-      /mongodb\+srv:\/\/([^:@]+)@/,
-      `mongodb+srv://$1:${password}@`
-    );
+    const password = process.env.MONGO_PASSWORD;
+    const connectionUri = password
+      ? uri.replace('<password>', encodeURIComponent(password))
+      : uri;
 
     try {
-      this._connection = await mongoose.connect(uriConPassword, {
+      this._connection = await mongoose.connect(connectionUri, {
         dbName,
         serverSelectionTimeoutMS: 10000,
       });
