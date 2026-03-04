@@ -37,7 +37,8 @@ class LlaveService {
    * Retorna historial con filtros opcionales
    */
   async obtenerHistorial(filters = {}) {
-    return llaveRepository.findHistorial(filters);
+    const raw = await llaveRepository.findHistorial(filters);
+    return raw.map(this._toClientFormat);
   }
 
   /**
