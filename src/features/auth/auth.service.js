@@ -18,18 +18,19 @@ class AuthService {
    * @returns {Promise<{ok: boolean, mensaje: string, token?: string, refreshToken?: string, usuario?: object}>}
    */
   async login(usuario, password) {
+    const INVALID_MSG = 'Usuario o contraseña incorrectos';
     const user = await authRepository.findByUsername(usuario);
 
     if (!user) {
-      return { ok: false, mensaje: `Usuario '${usuario}' no encontrado` };
+      return { ok: false, mensaje: INVALID_MSG };
     }
     if (!user.activo) {
-      return { ok: false, mensaje: 'Usuario inactivo. Contacte al administrador.' };
+      return { ok: false, mensaje: INVALID_MSG };
     }
 
     const passwordMatch = await bcrypt.compare(password, user.hash_password);
     if (!passwordMatch) {
-      return { ok: false, mensaje: 'Contraseña incorrecta' };
+      return { ok: false, mensaje: INVALID_MSG };
     }
 
     const payload = {
