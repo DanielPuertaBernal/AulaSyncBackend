@@ -8,6 +8,7 @@ require('express-async-errors');
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 
 const errorHandler = require('./shared/middlewares/error.handler');
 
@@ -23,6 +24,7 @@ const prestamoRoutes = require('./features/prestamos/prestamo.routes');
 const app = express();
 
 // ── Middlewares globales ──────────────────────────────────────────────────────
+app.use(helmet());
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true,
