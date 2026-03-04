@@ -44,7 +44,7 @@ class AuthService {
     });
     const refreshToken = jwt.sign(
       { sub: user._id.toString() },
-      process.env.JWT_SECRET,
+      process.env.JWT_REFRESH_SECRET,
       { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
     );
 
@@ -66,7 +66,7 @@ class AuthService {
    * @returns {Promise<{ok: boolean, token?: string}>}
    */
   async refresh(refreshToken) {
-    const payload = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    const payload = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
     const user = await authRepository.findById(payload.sub);
     if (!user || !user.activo) {
       throw Object.assign(new Error('Usuario no válido'), { statusCode: 401 });
