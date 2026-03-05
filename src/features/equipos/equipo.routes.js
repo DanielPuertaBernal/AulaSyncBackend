@@ -15,10 +15,17 @@ const crearSchema = z.object({
   descripcion: z.string().optional().default(''),
 });
 
+const actualizarSchema = z.object({
+  nombre: z.string().min(1).optional(),
+  marca: z.string().optional(),
+  descripcion: z.string().optional(),
+  estado: z.enum(['activo', 'inactivo']).optional(),
+}).strict();
+
 router.get('/', ...requireAuth, (req, res) => equipoController.listar(req, res));
 router.get('/disponibles', ...requireAuth, (req, res) => equipoController.disponibles(req, res));
 router.get('/barcode/:codigo', ...requireAuth, (req, res) => equipoController.buscarPorBarcode(req, res));
 router.post('/', ...requireAuth, validate(crearSchema), (req, res) => equipoController.crear(req, res));
-router.patch('/:id', ...requireAuth, (req, res) => equipoController.actualizar(req, res));
+router.patch('/:id', ...requireAuth, validate(actualizarSchema), (req, res) => equipoController.actualizar(req, res));
 
 module.exports = router;
