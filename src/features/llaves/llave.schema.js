@@ -1,30 +1,23 @@
 'use strict';
-/**
- * Llave Schema - Mongoose
- * Colección: registros_llaves
- * Mantiene estructura exacta de la BD Python existente
- */
 const mongoose = require('mongoose');
 
 const llaveSchema = new mongoose.Schema(
   {
-    'Número de Documento': { type: String, required: true, index: true },
-    'Docente': { type: String, default: '' },
-    'Día': { type: String, default: '' },
-    'Horario': { type: String, default: '' },
-    'Aula': { type: String, default: '' },
-    'Facultad': { type: String, default: 'No especificada' },
-    'Materia de la Clase': { type: String, default: '' },
-    'Fecha de entrega': { type: String, default: '', index: true },
-    'Hora de entrega': { type: String, default: '' },
-    'Fecha de devolución': { type: String, default: '' },
-    'Hora de devolución': { type: String, default: '' },
-    'Duración clase (entrega→devolución)': { type: String, default: '' },
-    'Se reclamó a tiempo': { type: Boolean, default: false },
-    'Tiempo de retraso': { type: String, default: '' },
-    'Retraso en entrega': { type: String, default: 'No' },
-    'Tiempo retraso devolución': { type: String, default: '' },
-    'Estado': { type: String, enum: ['En Préstamo', 'Devuelta'], default: 'En Préstamo', index: true },
+    numero_documento: { type: String, required: true, index: true },
+    docente: { type: String, default: '' },
+    dia: { type: String, default: '' },
+    horario: { type: String, default: '' },
+    aula: { type: String, default: '' },
+    facultad: { type: String, default: 'No especificada' },
+    materia: { type: String, default: '' },
+    fecha_entrega: { type: Date, default: null, index: true },
+    fecha_devolucion: { type: Date, default: null },
+    duracion: { type: String, default: '' },
+    reclamo_a_tiempo: { type: Boolean, default: false },
+    tiempo_retraso: { type: String, default: '' },
+    retraso_entrega: { type: String, default: 'No' },
+    tiempo_retraso_devolucion: { type: String, default: '' },
+    estado: { type: String, enum: ['en_prestamo', 'devuelta'], default: 'en_prestamo', index: true },
   },
   {
     collection: 'registros_llaves',

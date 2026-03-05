@@ -1,5 +1,6 @@
 'use strict';
 const llaveService = require('./llave.service');
+const { parsePagination } = require('../../shared/utils/pagination.helper');
 
 class LlaveController {
   async pendientes(req, res) {
@@ -13,9 +14,14 @@ class LlaveController {
   }
 
   async historial(req, res) {
-    const { fecha, documento, estado } = req.query;
-    const registros = await llaveService.obtenerHistorial({ fecha, documento, estado });
-    return res.json({ ok: true, data: { registros } });
+    const { fecha, documento, estado, page, limit } = req.query;
+    const pagination = parsePagination({ page, limit });
+    const result = await llaveService.obtenerHistorial({ fecha, documento, estado }, pagination);
+
+    if (pagination) {
+      return res.json({ ok: true, data: { registros: result.data }, meta: result.meta });
+    }
+    return res.json({ ok: true, data: { registros: result } });
   }
 
   async clasesProcesadasHoy(req, res) {
