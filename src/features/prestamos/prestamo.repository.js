@@ -11,10 +11,16 @@ class PrestamoRepository {
     return Prestamo.findOne({ docente_codigo_nfc: codigoNfc, estado: 'activo' }).lean();
   }
 
-  async create(data) { return (await Prestamo.create(data)).toObject(); }
+  async create(data, session = null) {
+    if (session) {
+      const [doc] = await Prestamo.create([data], { session });
+      return doc.toObject();
+    }
+    return (await Prestamo.create(data)).toObject();
+  }
 
-  async update(id, updates) {
-    return Prestamo.findByIdAndUpdate(id, { $set: updates }, { new: true }).lean();
+  async update(id, updates, session = null) {
+    return Prestamo.findByIdAndUpdate(id, { $set: updates }, { new: true, session }).lean();
   }
 
   async addEquipo(id, equipoDetalle) {
@@ -25,17 +31,25 @@ class PrestamoRepository {
     ).lean();
   }
 
-  async verificarEquipoPrestado(equipoId) {
-    return Prestamo.exists({
+  async verificarEquipoPrestado(equipoId, session = null) {
+    const query = Prestamo.exists({
       estado: { $in: ['activo', 'parcialmente_devuelto'] },
       'equipos.equipo_id': new mongoose.Types.ObjectId(equipoId),
       'equipos.estado_equipo': 'entregado',
     });
+    if (session) query.session(session);
+    return query;
   }
 }
 
 class DevolucionRepository {
-  async create(data) { return (await Devolucion.create(data)).toObject(); }
+  async create(data, session = null) {
+    if (session) {
+      const [doc] = await Devolucion.create([data], { session });
+      return doc.toObject();
+    }
+    return (await Devolucion.create(data)).toObject();
+  }
   async findByPrestamo(prestamoId) { return Devolucion.find({ prestamo_id: prestamoId }).lean(); }
 }
 
