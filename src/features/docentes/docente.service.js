@@ -39,18 +39,17 @@ class DocenteService {
 
     const docentes = rows
       .map((row) => {
-        // Mapear columnas flexiblemente (el Excel puede tener nombres distintos)
         const documento = cleanDocumento(
           row['Numero de documento'] || row['Número de documento'] || row['nroidenti'] || ''
         );
         if (!documento) return null;
 
         return {
-          'Numero de documento': documento,
-          'Nombre': cleanText(row['Nombre'] || row['nombre'] || row['Docente'] || ''),
-          'Facultad': cleanText(row['Facultad'] || row['facultad'] || row['descripcion'] || ''),
-          'Correo': cleanText(row['Correo'] || row['correo'] || row['email'] || '').toLowerCase(),
-          'Id Carnet': cleanText(row['Id Carnet'] || row['id_carnet'] || row['IdCarnet'] || ''),
+          numero_documento: documento,
+          nombre: cleanText(row['Nombre'] || row['nombre'] || row['Docente'] || ''),
+          facultad: cleanText(row['Facultad'] || row['facultad'] || row['descripcion'] || ''),
+          correo: cleanText(row['Correo'] || row['correo'] || row['email'] || '').toLowerCase(),
+          id_carnet: cleanText(row['Id Carnet'] || row['id_carnet'] || row['IdCarnet'] || ''),
         };
       })
       .filter(Boolean);

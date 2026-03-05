@@ -1,18 +1,13 @@
 'use strict';
-/**
- * Docente Schema - Mongoose
- * Colección: docentes
- * Mantiene estructura exacta de la BD Python existente
- */
 const mongoose = require('mongoose');
 
 const docenteSchema = new mongoose.Schema(
   {
-    'Numero de documento': { type: String, required: true, unique: true, trim: true },
-    'Nombre': { type: String, required: true, trim: true },
-    'Facultad': { type: String, default: '', trim: true },
-    'Correo': { type: String, default: '', trim: true, lowercase: true },
-    'Id Carnet': { type: String, default: '', trim: true },
+    numero_documento: { type: String, required: true, unique: true, trim: true },
+    nombre: { type: String, required: true, trim: true },
+    facultad: { type: String, default: '', trim: true },
+    correo: { type: String, default: '', trim: true, lowercase: true },
+    id_carnet: { type: String, default: '', trim: true },
   },
   {
     collection: 'docentes',
@@ -20,8 +15,8 @@ const docenteSchema = new mongoose.Schema(
   }
 );
 
-docenteSchema.index({ 'Nombre': 'text' });
-docenteSchema.index({ 'Id Carnet': 1 });
+docenteSchema.index({ nombre: 'text' });
+docenteSchema.index({ id_carnet: 1 });
 
 const Docente = mongoose.model('Docente', docenteSchema);
 module.exports = { Docente };
