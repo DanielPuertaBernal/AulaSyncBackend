@@ -8,7 +8,12 @@ class ProgramacionRepository {
   }
 
   async findByDia(dia) {
-    return Programacion.find({ dia }).lean();
+    const sinTildes = dia.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const pattern = sinTildes.split('').map((ch) => {
+      const map = { a: '[aá]', e: '[eé]', i: '[ií]', o: '[oó]', u: '[uú]' };
+      return map[ch.toLowerCase()] || ch;
+    }).join('');
+    return Programacion.find({ dia: new RegExp(`^${pattern}$`, 'i') }).lean();
   }
 
   async findByDocumento(documento) {

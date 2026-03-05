@@ -12,13 +12,7 @@ class ProgramacionService {
     const diaFiltro = dia || getDiaActual();
     const clases = await programacionRepository.findByDia(diaFiltro);
 
-    const ahora = new Date();
-    const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
-
     return clases.filter((clase) => {
-      const horaFin = horaAMinutos(clase.hora_fin);
-      if (horaFin !== null && horaFin < minutosAhora) return false;
-
       const doc = String(clase.numero_documento).replace('.0', '');
       const horario = String(clase.horario || '').trim();
       const yaEntregada = clasesConLlave.some(
@@ -63,10 +57,10 @@ class ProgramacionService {
       'Aula': 'aula',
       'descripcion': 'facultad',
       'Facultad': 'facultad',
-      'descripcion.1': 'materia',
+      'descripcion_1': 'materia',
       'Materia de la Clase': 'materia',
-      'materia': 'codigo_materia',
       'Código de la Materia': 'codigo_materia',
+      'materia': 'codigo_materia',
       'grupo': 'grupo',
       'Grupo': 'grupo',
       'nivel_grupo': 'nivel_grupo',
