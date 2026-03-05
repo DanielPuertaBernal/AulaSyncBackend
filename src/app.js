@@ -1,9 +1,4 @@
 'use strict';
-/**
- * app.js - Express application
- * Registra todas las rutas por feature
- */
-require('dotenv').config();
 require('express-async-errors');
 
 const express = require('express');

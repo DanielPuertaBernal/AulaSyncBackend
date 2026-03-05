@@ -11,6 +11,7 @@ const mongoClient = require('./shared/db/mongo.client');
 const nfcGateway = require('./shared/websocket/nfc.gateway');
 
 const PORT = process.env.PORT || 3001;
+const CLIENT_ORIGIN = process.env.CLIENT_URL || 'http://localhost:5173';
 
 const REQUIRED_ENV = ['MONGO_URI', 'MONGO_DB', 'JWT_SECRET', 'JWT_REFRESH_SECRET'];
 
@@ -31,7 +32,7 @@ async function bootstrap() {
   const httpServer = http.createServer(app);
   const io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL || 'http://localhost:5173',
+      origin: CLIENT_ORIGIN,
       credentials: true,
     },
   });
