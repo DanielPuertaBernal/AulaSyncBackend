@@ -1,28 +1,13 @@
 'use strict';
-/**
- * Programacion Service
- * Equivale a: application/services/programacion_service.py
- *           + application/processing/programacion_cleaner.py
- *           + infrastructure/importers/programacion_excel_importer.py
- */
 const programacionRepository = require('./programacion.repository');
 const { parseExcel, cleanText, cleanDocumento, generateExcel } = require('../../shared/utils/excel.parser');
 const { getDiaActual, horaAMinutos } = require('../../shared/utils/date.helper');
-
-const GAP_MINIMO_MINUTOS = 30;
 
 class ProgramacionService {
   async listar() {
     return programacionRepository.findAll();
   }
 
-  /**
-   * Clases del día indicado, filtrando las que ya pasaron su horario y
-   * las que tienen llave entregada (requiere lista de clases procesadas)
-   * @param {string} [dia] - Nombre del día (default: hoy)
-   * @param {object[]} [clasesConLlave] - clases con llave activa { documento, horario }
-   * @returns {Promise<object[]>}
-   */
   async listarPorDia(dia, clasesConLlave = []) {
     const diaFiltro = dia || getDiaActual();
     const clases = await programacionRepository.findByDia(diaFiltro);
@@ -31,13 +16,11 @@ class ProgramacionService {
     const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
 
     return clases.filter((clase) => {
-      // Filtrar las que ya terminaron
-      const horaFin = horaAMinutos(clase['Hora Fin']);
+      const horaFin = horaAMinutos(clase.hora_fin);
       if (horaFin !== null && horaFin < minutosAhora) return false;
 
-      // Filtrar las que ya tienen llave entregada
-      const doc = String(clase['Número de Documento']).replace('.0', '');
-      const horario = String(clase['Horario'] || '').trim();
+      const doc = String(clase.numero_documento).replace('.0', '');
+      const horario = String(clase.horario || '').trim();
       const yaEntregada = clasesConLlave.some(
         (c) => String(c.documento).replace('.0', '') === doc && String(c.horario).trim() === horario
       );
@@ -45,21 +28,11 @@ class ProgramacionService {
     });
   }
 
-  /**
-   * Exporta toda la programación como buffer XLSX
-   * @returns {Buffer}
-   */
   async exportar() {
     const registros = await programacionRepository.findAll();
     return generateExcel(registros, 'Programacion');
   }
 
-  /**
-   * Importa programación desde Excel
-   * Equivale a ProgramacionCleaner.limpiar_programacion + ProgramacionExcelImporter
-   * @param {Buffer} buffer
-   * @returns {Promise<{insertados: number}>}
-   */
   async importarDesdeExcel(buffer) {
     const rows = parseExcel(buffer);
     if (!rows.length) throw Object.assign(new Error('El archivo Excel está vacío'), { statusCode: 400 });
@@ -72,41 +45,35 @@ class ProgramacionService {
     return programacionRepository.bulkInsert(limpios);
   }
 
-  /**
-   * Limpia y transforma filas crudas del Excel
-   * Equivale a ProgramacionCleaner.limpiar_programacion (Python)
-   * @param {object[]} rows
-   * @returns {object[]}
-   */
   _limpiarProgramacion(rows) {
     const MAPEO = {
-      'nroidenti': 'Número de Documento',
-      'Número de Documento': 'Número de Documento',
-      'profesor': 'Docente',
-      'Docente': 'Docente',
-      'dia': 'Día',
-      'Día': 'Día',
-      'horario': 'Horario',
-      'Horario': 'Horario',
-      'hora_ini': 'Hora Inicio',
-      'Hora Inicio': 'Hora Inicio',
-      'hora_fin': 'Hora Fin',
-      'Hora Fin': 'Hora Fin',
-      'aula': 'Aula',
-      'Aula': 'Aula',
-      'descripcion': 'Facultad',
-      'Facultad': 'Facultad',
-      'descripcion.1': 'Materia de la Clase',
-      'Materia de la Clase': 'Materia de la Clase',
-      'materia': 'Código de la Materia',
-      'Código de la Materia': 'Código de la Materia',
-      'grupo': 'Grupo',
-      'Grupo': 'Grupo',
-      'nivel_grupo': 'Nivel del Grupo',
-      'Nivel del Grupo': 'Nivel del Grupo',
-      'nro_estudiantes_premat': 'Estudiantes Prematriculados',
-      'nro_estudiantes': 'Estudiantes Matriculados',
-      'total_estudiantes': 'Total de Estudiantes',
+      'nroidenti': 'numero_documento',
+      'Número de Documento': 'numero_documento',
+      'profesor': 'docente',
+      'Docente': 'docente',
+      'dia': 'dia',
+      'Día': 'dia',
+      'horario': 'horario',
+      'Horario': 'horario',
+      'hora_ini': 'hora_inicio',
+      'Hora Inicio': 'hora_inicio',
+      'hora_fin': 'hora_fin',
+      'Hora Fin': 'hora_fin',
+      'aula': 'aula',
+      'Aula': 'aula',
+      'descripcion': 'facultad',
+      'Facultad': 'facultad',
+      'descripcion.1': 'materia',
+      'Materia de la Clase': 'materia',
+      'materia': 'codigo_materia',
+      'Código de la Materia': 'codigo_materia',
+      'grupo': 'grupo',
+      'Grupo': 'grupo',
+      'nivel_grupo': 'nivel_grupo',
+      'Nivel del Grupo': 'nivel_grupo',
+      'nro_estudiantes_premat': 'estudiantes_prematriculados',
+      'nro_estudiantes': 'estudiantes_matriculados',
+      'total_estudiantes': 'total_estudiantes',
     };
 
     return rows
@@ -118,37 +85,31 @@ class ProgramacionService {
           }
         }
 
-        // Documento limpio
-        const documento = cleanDocumento(mapped['Número de Documento'] || '');
+        const documento = cleanDocumento(mapped.numero_documento || '');
         if (!documento) return null;
-        mapped['Número de Documento'] = documento;
+        mapped.numero_documento = documento;
 
-        // Limpiar textos
-        ['Docente', 'Día', 'Aula', 'Facultad', 'Materia de la Clase', 'Horario'].forEach((k) => {
+        ['docente', 'dia', 'aula', 'facultad', 'materia', 'horario'].forEach((k) => {
           if (mapped[k]) mapped[k] = cleanText(mapped[k]);
         });
 
-        // Normalizar horario si solo existe Hora Inicio y Hora Fin
-        if (!mapped['Horario'] && mapped['Hora Inicio'] && mapped['Hora Fin']) {
-          mapped['Horario'] = `${mapped['Hora Inicio']} A ${mapped['Hora Fin']}`;
+        if (!mapped.horario && mapped.hora_inicio && mapped.hora_fin) {
+          mapped.horario = `${mapped.hora_inicio} A ${mapped.hora_fin}`;
         }
 
-        // Separar horario si existe en campo "Horario"
-        if (mapped['Horario'] && (!mapped['Hora Inicio'] || !mapped['Hora Fin'])) {
-          const [ini, fin] = String(mapped['Horario']).toUpperCase().split(' A ');
-          if (ini) mapped['Hora Inicio'] = ini.trim();
-          if (fin) mapped['Hora Fin'] = fin.trim();
+        if (mapped.horario && (!mapped.hora_inicio || !mapped.hora_fin)) {
+          const [ini, fin] = String(mapped.horario).toUpperCase().split(' A ');
+          if (ini) mapped.hora_inicio = ini.trim();
+          if (fin) mapped.hora_fin = fin.trim();
         }
 
-        // Normalizar horas (redondear minutos 1-9 → 0)
-        mapped['Hora Inicio'] = this._normalizarMinutos(mapped['Hora Inicio']);
-        mapped['Hora Fin'] = this._normalizarMinutos(mapped['Hora Fin']);
+        mapped.hora_inicio = this._normalizarMinutos(mapped.hora_inicio);
+        mapped.hora_fin = this._normalizarMinutos(mapped.hora_fin);
 
-        // Números
-        mapped['Estudiantes Prematriculados'] = parseInt(mapped['Estudiantes Prematriculados'], 10) || 0;
-        mapped['Estudiantes Matriculados'] = parseInt(mapped['Estudiantes Matriculados'], 10) || 0;
-        mapped['Total de Estudiantes'] =
-          (mapped['Estudiantes Prematriculados'] + mapped['Estudiantes Matriculados']) || 0;
+        mapped.estudiantes_prematriculados = parseInt(mapped.estudiantes_prematriculados, 10) || 0;
+        mapped.estudiantes_matriculados = parseInt(mapped.estudiantes_matriculados, 10) || 0;
+        mapped.total_estudiantes =
+          (mapped.estudiantes_prematriculados + mapped.estudiantes_matriculados) || 0;
 
         return mapped;
       })
@@ -156,10 +117,6 @@ class ProgramacionService {
       .filter((r) => this._esRegistroValido(r));
   }
 
-  /**
-   * Normaliza minutos 1-9 → 0 (ej: 07:05 → 07:00)
-   * @param {string} hora  "HH:MM"
-   */
   _normalizarMinutos(hora) {
     if (!hora) return hora;
     const parts = String(hora).split(':');
@@ -171,11 +128,8 @@ class ProgramacionService {
     return hora;
   }
 
-  /**
-   * Verifica que el registro tenga los campos mínimos necesarios
-   */
   _esRegistroValido(r) {
-    return !!(r['Número de Documento'] && r['Docente'] && r['Día'] && r['Aula']);
+    return !!(r.numero_documento && r.docente && r.dia && r.aula);
   }
 }
 

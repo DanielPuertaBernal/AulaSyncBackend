@@ -1,33 +1,38 @@
 'use strict';
-/**
- * Llave Repository
- * Equivale a infrastructure/repositories/llave_mongo_repository.py
- */
 const { Llave } = require('./llave.schema');
+const { applyPagination } = require('../../shared/utils/pagination.helper');
 
 class LlaveRepository {
   async findPendientes() {
-    return Llave.find({ 'Estado': 'En Préstamo' }).lean();
+    return Llave.find({ estado: 'en_prestamo' }).lean();
   }
 
   async findPendienteByDocumento(documento) {
-    return Llave.findOne({ 'Número de Documento': documento, 'Estado': 'En Préstamo' }).lean();
+    return Llave.findOne({ numero_documento: documento, estado: 'en_prestamo' }).lean();
   }
 
   async findByFecha(fechaStr) {
-    return Llave.find({ 'Fecha de entrega': fechaStr }).lean();
+    const start = new Date(`${fechaStr}T00:00:00`);
+    const end = new Date(`${fechaStr}T23:59:59.999`);
+    return Llave.find({ fecha_entrega: { $gte: start, $lte: end } }).lean();
   }
 
   async findPendientesByFecha(fechaStr) {
-    return Llave.find({ 'Estado': 'En Préstamo', 'Fecha de entrega': fechaStr }).lean();
+    const start = new Date(`${fechaStr}T00:00:00`);
+    const end = new Date(`${fechaStr}T23:59:59.999`);
+    return Llave.find({ estado: 'en_prestamo', fecha_entrega: { $gte: start, $lte: end } }).lean();
   }
 
-  async findHistorial(filters = {}) {
+  async findHistorial(filters = {}, pagination = null) {
     const query = {};
-    if (filters.fecha) query['Fecha de entrega'] = filters.fecha;
-    if (filters.documento) query['Número de Documento'] = filters.documento;
-    if (filters.estado) query['Estado'] = filters.estado;
-    return Llave.find(query).sort({ 'Fecha de entrega': -1, 'Hora de entrega': -1 }).lean();
+    if (filters.fecha) {
+      const start = new Date(`${filters.fecha}T00:00:00`);
+      const end = new Date(`${filters.fecha}T23:59:59.999`);
+      query.fecha_entrega = { $gte: start, $lte: end };
+    }
+    if (filters.documento) query.numero_documento = filters.documento;
+    if (filters.estado) query.estado = filters.estado;
+    return applyPagination(Llave.find(query).sort({ fecha_entrega: -1 }), pagination);
   }
 
   async create(registro) {
@@ -36,12 +41,6 @@ class LlaveRepository {
 
   async update(id, updates) {
     return Llave.findByIdAndUpdate(id, { $set: updates }, { new: true }).lean();
-  }
-
-  async ensureIndexes() {
-    await Llave.collection.createIndex({ 'Número de Documento': 1 });
-    await Llave.collection.createIndex({ 'Estado': 1 });
-    await Llave.collection.createIndex({ 'Fecha de entrega': 1 });
   }
 }
 

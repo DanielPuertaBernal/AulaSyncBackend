@@ -1,8 +1,4 @@
 'use strict';
-/**
- * Docente Repository
- * Equivale a infrastructure/repositories/docente_mongo_repository.py
- */
 const { Docente } = require('./docente.schema');
 
 class DocenteRepository {
@@ -11,11 +7,11 @@ class DocenteRepository {
   }
 
   async findByDocumento(documento) {
-    return Docente.findOne({ 'Numero de documento': String(documento) }).lean();
+    return Docente.findOne({ numero_documento: String(documento) }).lean();
   }
 
   async findByCarnet(idCarnet) {
-    return Docente.findOne({ 'Id Carnet': String(idCarnet) }).lean();
+    return Docente.findOne({ id_carnet: String(idCarnet) }).lean();
   }
 
   async search(query) {
@@ -23,22 +19,16 @@ class DocenteRepository {
     const regex = new RegExp(escaped, 'i');
     return Docente.find({
       $or: [
-        { 'Numero de documento': regex },
-        { 'Nombre': regex },
+        { numero_documento: regex },
+        { nombre: regex },
       ],
     }).lean();
   }
 
-  /**
-   * Bulk upsert: inserta o actualiza por "Numero de documento"
-   * Equivale a docente_excel_importer bulk save
-   * @param {object[]} docentes
-   * @returns {Promise<{insertados: number, actualizados: number}>}
-   */
   async bulkUpsert(docentes) {
     const ops = docentes.map((d) => ({
       updateOne: {
-        filter: { 'Numero de documento': d['Numero de documento'] },
+        filter: { numero_documento: d.numero_documento },
         update: { $set: d },
         upsert: true,
       },

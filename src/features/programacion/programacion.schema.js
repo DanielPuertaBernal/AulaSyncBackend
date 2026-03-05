@@ -1,30 +1,24 @@
 'use strict';
-/**
- * Programacion Schema - Mongoose
- * Colección: programacion
- * Mantiene estructura exacta de la BD Python existente
- */
 const mongoose = require('mongoose');
 
 const programacionSchema = new mongoose.Schema(
   {
-    'Número de Documento': { type: String, required: true, trim: true },
-    'Docente': { type: String, default: '', trim: true },
-    'Día': { type: String, default: '', trim: true },
-    'Horario': { type: String, default: '', trim: true },
-    'Hora Inicio': { type: String, default: '', trim: true },
-    'Hora Fin': { type: String, default: '', trim: true },
-    'Aula': { type: String, default: '', trim: true },
-    'Facultad': { type: String, default: '', trim: true },
-    'Materia de la Clase': { type: String, default: '', trim: true },
-    // Campos adicionales del Excel que se mantienen
-    'Código de la Materia': { type: String, default: '' },
-    'Grupo': { type: String, default: '' },
-    'Nivel del Grupo': { type: String, default: '' },
-    'Estudiantes Prematriculados': { type: Number, default: 0 },
-    'Estudiantes Matriculados': { type: Number, default: 0 },
-    'Total de Estudiantes': { type: Number, default: 0 },
-    'Observaciones': { type: String, default: '' },
+    numero_documento: { type: String, required: true, trim: true },
+    docente: { type: String, default: '', trim: true },
+    dia: { type: String, default: '', trim: true },
+    horario: { type: String, default: '', trim: true },
+    hora_inicio: { type: String, default: '', trim: true },
+    hora_fin: { type: String, default: '', trim: true },
+    aula: { type: String, default: '', trim: true },
+    facultad: { type: String, default: '', trim: true },
+    materia: { type: String, default: '', trim: true },
+    codigo_materia: { type: String, default: '' },
+    grupo: { type: String, default: '' },
+    nivel_grupo: { type: String, default: '' },
+    estudiantes_prematriculados: { type: Number, default: 0 },
+    estudiantes_matriculados: { type: Number, default: 0 },
+    total_estudiantes: { type: Number, default: 0 },
+    observaciones: { type: String, default: '' },
   },
   {
     collection: 'programacion',
@@ -32,9 +26,9 @@ const programacionSchema = new mongoose.Schema(
   }
 );
 
-programacionSchema.index({ 'Día': 1 });
-programacionSchema.index({ 'Número de Documento': 1 });
-programacionSchema.index({ 'Aula': 1 });
+programacionSchema.index({ dia: 1 });
+programacionSchema.index({ numero_documento: 1 });
+programacionSchema.index({ aula: 1 });
 
 const Programacion = mongoose.model('Programacion', programacionSchema);
 module.exports = { Programacion };

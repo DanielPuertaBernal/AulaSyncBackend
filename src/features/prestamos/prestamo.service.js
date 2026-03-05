@@ -29,37 +29,57 @@ class PrestamoService {
       throw Object.assign(new Error('Debe prestar al menos un equipo'), { statusCode: 400 });
     }
 
-    // Normalizar equipos: acepta array de IDs o de objetos {equipo_id, ...}
     const equiposIds = this._normalizarEquipos(equipos);
 
-    // Validar disponibilidad
-    await this._validarDisponibilidad(equiposIds);
+    const session = await mongoose.startSession();
+    try {
+      session.startTransaction();
 
-    // Construir detalles
-    const detalles = await Promise.all(
-      equiposIds.map(async (id) => {
-        const equipo = await equipoRepository.findById(id);
-        if (!equipo) throw Object.assign(new Error(`Equipo ${id} no encontrado`), { statusCode: 404 });
-        return {
-          equipo_id: new mongoose.Types.ObjectId(id),
-          equipo_nombre: equipo.nombre,
-          equipo_marca: equipo.marca,
-          equipo_codigo: equipo.codigo_inventario,
-          equipo_consecutivo: equipo.consecutivo,
-          equipo_codigo_barras: equipo.codigo_barras,
-          estado_equipo: 'entregado',
-          fecha_entrega: new Date(),
-        };
-      })
-    );
+      // Validar disponibilidad dentro de la transacción
+      for (const id of equiposIds) {
+        const prestado = await prestamoRepository.verificarEquipoPrestado(id, session);
+        if (prestado) {
+          const eq = await equipoRepository.findById(id);
+          throw Object.assign(
+            new Error(`El equipo '${eq?.nombre || id}' ya está prestado`),
+            { statusCode: 409 }
+          );
+        }
+      }
 
-    return prestamoRepository.create({
-      docente_codigo_nfc,
-      docente_nombre,
-      auxiliar_prestamista: auxiliar_prestamista || 'Auxiliar',
-      equipos: detalles,
-      estado: 'activo',
-    });
+      const detalles = await Promise.all(
+        equiposIds.map(async (id) => {
+          const equipo = await equipoRepository.findById(id);
+          if (!equipo) throw Object.assign(new Error(`Equipo ${id} no encontrado`), { statusCode: 404 });
+          return {
+            equipo_id: new mongoose.Types.ObjectId(id),
+            equipo_nombre: equipo.nombre,
+            equipo_marca: equipo.marca,
+            equipo_codigo: equipo.codigo_inventario,
+            equipo_consecutivo: equipo.consecutivo,
+            equipo_codigo_barras: equipo.codigo_barras,
+            estado_equipo: 'entregado',
+            fecha_entrega: new Date(),
+          };
+        })
+      );
+
+      const prestamo = await prestamoRepository.create({
+        docente_codigo_nfc,
+        docente_nombre,
+        auxiliar_prestamista: auxiliar_prestamista || 'Auxiliar',
+        equipos: detalles,
+        estado: 'activo',
+      }, session);
+
+      await session.commitTransaction();
+      return prestamo;
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
   }
 
   /**
@@ -105,7 +125,6 @@ class PrestamoService {
       throw Object.assign(new Error('El préstamo ya fue devuelto completamente'), { statusCode: 400 });
     }
 
-    // Si no se especifican equipos, devolver todos los pendientes
     const equiposADevolver = equipos && equipos.length
       ? this._normalizarEquipos(equipos)
       : prestamo.equipos
@@ -115,7 +134,6 @@ class PrestamoService {
     const now = new Date();
     const equiposDevueltos = [];
 
-    // Actualizar estado de cada equipo en el préstamo
     const equiposActualizados = prestamo.equipos.map((eq) => {
       const strId = String(eq.equipo_id);
       if (equiposADevolver.includes(strId) && eq.estado_equipo === 'entregado') {
@@ -139,23 +157,32 @@ class PrestamoService {
     const esCompleta = aunEntregados.length === 0;
     const nuevoEstado = esCompleta ? 'completamente_devuelto' : 'parcialmente_devuelto';
 
-    // Actualizar préstamo
-    await prestamoRepository.update(prestamo_id, {
-      equipos: equiposActualizados,
-      estado: nuevoEstado,
-    });
+    const session = await mongoose.startSession();
+    try {
+      session.startTransaction();
 
-    // Crear registro de devolución
-    const devolucion = await devolucionRepository.create({
-      prestamo_id: new mongoose.Types.ObjectId(prestamo_id),
-      docente_codigo_nfc,
-      docente_nombre,
-      equipos_devueltos: equiposDevueltos,
-      auxiliar_que_recibio: auxiliar_que_recibio || 'Auxiliar',
-      es_devolucion_completa: esCompleta,
-    });
+      await prestamoRepository.update(prestamo_id, {
+        equipos: equiposActualizados,
+        estado: nuevoEstado,
+      }, session);
 
-    return { devolucion, prestamo_estado: nuevoEstado };
+      const devolucion = await devolucionRepository.create({
+        prestamo_id: new mongoose.Types.ObjectId(prestamo_id),
+        docente_codigo_nfc,
+        docente_nombre,
+        equipos_devueltos: equiposDevueltos,
+        auxiliar_que_recibio: auxiliar_que_recibio || 'Auxiliar',
+        es_devolucion_completa: esCompleta,
+      }, session);
+
+      await session.commitTransaction();
+      return { devolucion, prestamo_estado: nuevoEstado };
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
   }
 
   _normalizarEquipos(equipos) {
@@ -166,19 +193,6 @@ class PrestamoService {
       }
       return String(item);
     }).filter(Boolean);
-  }
-
-  async _validarDisponibilidad(equipoIds) {
-    for (const id of equipoIds) {
-      const prestado = await prestamoRepository.verificarEquipoPrestado(id);
-      if (prestado) {
-        const eq = await equipoRepository.findById(id);
-        throw Object.assign(
-          new Error(`El equipo '${eq?.nombre || id}' ya está prestado`),
-          { statusCode: 409 }
-        );
-      }
-    }
   }
 }
 

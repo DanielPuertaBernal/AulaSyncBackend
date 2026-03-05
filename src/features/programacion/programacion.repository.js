@@ -1,4 +1,5 @@
 'use strict';
+const mongoose = require('mongoose');
 const { Programacion } = require('./programacion.schema');
 
 class ProgramacionRepository {
@@ -7,26 +8,29 @@ class ProgramacionRepository {
   }
 
   async findByDia(dia) {
-    return Programacion.find({ 'Día': dia }).lean();
+    return Programacion.find({ dia }).lean();
   }
 
   async findByDocumento(documento) {
-    return Programacion.find({ 'Número de Documento': documento }).lean();
+    return Programacion.find({ numero_documento: documento }).lean();
   }
 
-  async deleteAll() {
-    return Programacion.deleteMany({});
-  }
-
-  /**
-   * Bulk insert (reemplaza toda la programación)
-   * @param {object[]} registros
-   */
   async bulkInsert(registros) {
-    await this.deleteAll();
-    if (!registros.length) return { insertados: 0 };
-    const result = await Programacion.insertMany(registros, { ordered: false });
-    return { insertados: result.length };
+    const session = await mongoose.startSession();
+    try {
+      session.startTransaction();
+      await Programacion.deleteMany({}, { session });
+      const result = registros.length
+        ? await Programacion.insertMany(registros, { session, ordered: false })
+        : [];
+      await session.commitTransaction();
+      return { insertados: result.length };
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
   }
 }
 

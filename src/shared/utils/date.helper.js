@@ -120,16 +120,14 @@ function calcularRetrasoDevolucion(horario, fechaEntrega, ahora = new Date()) {
 
 /**
  * Calcula la duración entre entrega y devolución
- * @param {string} fechaEntrega
- * @param {string} horaEntrega
+ * @param {Date} fechaEntrega
  * @param {Date} ahora
- * @returns {string} Ej: "1h 30min"
+ * @returns {string}
  */
-function calcularDuracion(fechaEntrega, horaEntrega, ahora = new Date()) {
+function calcularDuracion(fechaEntrega, ahora = new Date()) {
   try {
-    if (!fechaEntrega || !horaEntrega) return '';
-    const entrega = new Date(`${fechaEntrega}T${horaEntrega}`);
-    const diffMs = ahora - entrega;
+    if (!fechaEntrega) return '';
+    const diffMs = ahora - fechaEntrega;
     const diffMin = Math.floor(diffMs / 60000);
     return `${Math.floor(diffMin / 60)}h ${diffMin % 60}min`;
   } catch {
