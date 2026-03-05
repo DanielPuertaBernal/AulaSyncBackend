@@ -55,8 +55,8 @@ const usuarioSchema = new mongoose.Schema(
       default: true,
     },
     fecha_creacion: {
-      type: String,
-      default: () => new Date().toISOString(),
+      type: Date,
+      default: Date.now,
     },
   },
   {

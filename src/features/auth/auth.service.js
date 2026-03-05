@@ -1,12 +1,8 @@
 'use strict';
-/**
- * Auth Service - Lógica de autenticación con JWT
- * Reemplaza: SessionManager singleton → JWT stateless
- * Equivale a: application/services/auth_service.py + application/auth/auth_manager.py
- */
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const authRepository = require('./auth.repository');
+const usuarioRepository = require('../usuarios/usuario.repository');
 
 const SALT_ROUNDS = 12;
 
@@ -68,7 +64,7 @@ class AuthService {
    */
   async refresh(refreshToken) {
     const payload = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-    const user = await authRepository.findById(payload.sub);
+    const user = await usuarioRepository.findById(payload.sub);
     if (!user || !user.activo) {
       throw Object.assign(new Error('Usuario no válido'), { statusCode: 401 });
     }
@@ -111,7 +107,7 @@ class AuthService {
    * @returns {Promise<object|null>}
    */
   async getMe(userId) {
-    return authRepository.findById(userId);
+    return usuarioRepository.findById(userId);
   }
 }
 

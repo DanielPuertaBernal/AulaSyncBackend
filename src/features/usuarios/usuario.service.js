@@ -4,6 +4,7 @@
  * Equivale a application/services/auth_service.py (sección gestión de usuarios)
  */
 const usuarioRepository = require('./usuario.repository');
+const authRepository = require('../auth/auth.repository');
 const authService = require('../auth/auth.service');
 const { ROLES } = require('./usuario.schema');
 
@@ -49,7 +50,6 @@ class UsuarioService {
       rol: rol || ROLES.AUX,
       hash_password: hashPassword,
       activo: true,
-      fecha_creacion: new Date().toISOString(),
     });
   }
 
@@ -105,8 +105,7 @@ class UsuarioService {
    * @returns {Promise<boolean>}
    */
   async cambiarContrasena(username, passwordActual, passwordNueva) {
-    const { Usuario } = require('./usuario.schema');
-    const user = await Usuario.findOne({ usuario: username }).select('+hash_password').lean();
+    const user = await authRepository.findByUsername(username);
     if (!user) {
       throw Object.assign(new Error('Usuario no encontrado'), { statusCode: 404 });
     }
