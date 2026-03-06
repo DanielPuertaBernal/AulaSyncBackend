@@ -39,17 +39,16 @@ class DocenteService {
 
     const docentes = rows
       .map((row) => {
-        const documento = cleanDocumento(
-          row['Numero de documento'] || row['Número de documento'] || row['nroidenti'] || ''
-        );
+        const r = this._normalizarColumnas(row);
+        const documento = cleanDocumento(r['numero de documento'] || r['nroidenti'] || '');
         if (!documento) return null;
 
         return {
           numero_documento: documento,
-          nombre: cleanText(row['Nombre'] || row['nombre'] || row['Docente'] || ''),
-          facultad: cleanText(row['Facultad'] || row['facultad'] || row['descripcion'] || ''),
-          correo: cleanText(row['Correo'] || row['correo'] || row['email'] || '').toLowerCase(),
-          id_carnet: cleanText(row['Id Carnet'] || row['id_carnet'] || row['IdCarnet'] || ''),
+          nombre: cleanText(r['nombre'] || r['docente'] || ''),
+          facultad: cleanText(r['facultad'] || r['descripcion'] || ''),
+          correo: cleanText(r['correo'] || r['email'] || '').toLowerCase(),
+          id_carnet: cleanText(r['id carnet'] || r['id_carnet'] || r['idcarnet'] || ''),
         };
       })
       .filter(Boolean);
@@ -60,6 +59,20 @@ class DocenteService {
 
     const result = await docenteRepository.bulkUpsert(docentes);
     return { ...result, total: docentes.length };
+  }
+
+  // Normaliza los keys del row: lowercase, sin tildes, trimmed
+  _normalizarColumnas(row) {
+    const normalized = {};
+    for (const [key, value] of Object.entries(row)) {
+      const clean = key
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+      normalized[clean] = value;
+    }
+    return normalized;
   }
 }
 
