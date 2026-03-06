@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 
 const programacionSchema = new mongoose.Schema(
   {
+    semestre: { type: String, default: '', trim: true },
     numero_documento: { type: String, required: true, trim: true },
     docente: { type: String, default: '', trim: true },
     dia: { type: String, default: '', trim: true },

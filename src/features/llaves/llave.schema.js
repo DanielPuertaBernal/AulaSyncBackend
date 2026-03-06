@@ -18,6 +18,14 @@ const llaveSchema = new mongoose.Schema(
     tiempo_retraso: { type: String, default: '' },
     retraso_entrega: { type: Boolean, default: false },
     tiempo_retraso_devolucion: { type: String, default: '' },
+    // Quién reclamó la llave
+    quien_reclama: { type: String, enum: ['docente', 'monitor', ''], default: '' },
+    numero_documento_reclama: { type: String, default: '' },
+    nombre_reclama: { type: String, default: '' },
+    // Quién devolvió la llave
+    quien_entrega: { type: String, enum: ['docente', 'monitor', ''], default: '' },
+    numero_documento_entrega: { type: String, default: '' },
+    nombre_entrega: { type: String, default: '' },
     estado: {
       type: String,
       enum: ['en_prestamo', 'entregado', 'demora_entrega'],
