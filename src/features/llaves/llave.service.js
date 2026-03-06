@@ -149,7 +149,7 @@ class LlaveService {
   }
 
   /**
-   * Entrega manual de llave (formulario)
+   * Entrega manual de llave (formulario) - Sin relación con programación
    */
   async registrarEntrega(infoClase) {
     const campos = ['nroidenti', 'profesor', 'aula'];
@@ -162,22 +162,24 @@ class LlaveService {
     if (existing) throw Object.assign(new Error('El docente ya tiene una llave prestada'), { statusCode: 409 });
 
     const ahora = new Date();
-    const tiempoRetraso = calcularTiempoRetraso(infoClase.horario, ahora);
+    const horario = (infoClase.hora_inicio && infoClase.hora_fin)
+      ? `${infoClase.hora_inicio} A ${infoClase.hora_fin}`
+      : '';
 
     const registro = {
       numero_documento: documento,
       docente: infoClase.profesor || '',
-      dia: infoClase.dia || getDiaActual(),
-      horario: infoClase.horario || '',
+      dia: getDiaActual(),
+      horario,
       aula: infoClase.aula,
       facultad: infoClase.facultad || 'No especificada',
-      materia: infoClase.materia || '',
+      materia: infoClase.motivo || '',
       fecha_hora_entrega: ahora,
       fecha_hora_devolucion: null,
       duracion: '',
       duracion_clase: '',
-      se_reclamo_a_tiempo: !tiempoRetraso,
-      tiempo_retraso: tiempoRetraso,
+      se_reclamo_a_tiempo: false,
+      tiempo_retraso: '',
       retraso_entrega: false,
       tiempo_retraso_devolucion: '',
       estado: 'en_prestamo',

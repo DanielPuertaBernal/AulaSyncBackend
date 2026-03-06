@@ -16,6 +16,11 @@ class NFCGateway extends EventEmitter {
     this._lastRead = '';
     this._lastReadTime = 0;
     this._active = false;
+    this._modo = 'auto'; // 'auto' | 'identificacion'
+  }
+
+  get modo() {
+    return this._modo;
   }
 
   /**
@@ -36,6 +41,12 @@ class NFCGateway extends EventEmitter {
 
       socket.on('nfc:start', () => this._startListening(nsp));
       socket.on('nfc:stop', () => this._stopListening(nsp));
+      socket.on('nfc:set_modo', ({ modo }) => {
+        if (['auto', 'identificacion'].includes(modo)) {
+          this._modo = modo;
+          nsp.emit('nfc:modo', { modo });
+        }
+      });
       socket.on('nfc:simulate', ({ codigo }) => {
         if (codigo) this.simularLectura(codigo);
       });
@@ -134,6 +145,15 @@ class NFCGateway extends EventEmitter {
       this._io.of('/nfc').emit('nfc:resultado', data);
     }
     this.emit('resultado', data);
+  }
+
+  emitirCarnetLeido(idCarnet) {
+    if (this._io) {
+      this._io.of('/nfc').emit('nfc:carnet_leido', {
+        id_carnet: idCarnet,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 }
 

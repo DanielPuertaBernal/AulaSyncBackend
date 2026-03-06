@@ -8,9 +8,14 @@ class NFCService {
    * y emite evento WebSocket al frontend
    */
   async procesarLectura(idCarnet) {
+    // Modo identificacion: solo emitir carnet sin procesar programación
+    if (nfcGateway.modo === 'identificacion') {
+      nfcGateway.emitirCarnetLeido(idCarnet);
+      return { ok: true, tipo: 'identificacion', mensaje: 'Carnet identificado' };
+    }
+
     const resultado = await llaveService.procesarLecturaNFC(idCarnet);
 
-    // Emitir al frontend via WebSocket
     nfcGateway.emitirLectura({
       ...resultado,
       id_carnet: idCarnet,
