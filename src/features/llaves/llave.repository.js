@@ -14,13 +14,13 @@ class LlaveRepository {
   async findByFecha(fechaStr) {
     const start = new Date(`${fechaStr}T00:00:00`);
     const end = new Date(`${fechaStr}T23:59:59.999`);
-    return Llave.find({ fecha_entrega: { $gte: start, $lte: end } }).lean();
+    return Llave.find({ fecha_hora_entrega: { $gte: start, $lte: end } }).lean();
   }
 
   async findPendientesByFecha(fechaStr) {
     const start = new Date(`${fechaStr}T00:00:00`);
     const end = new Date(`${fechaStr}T23:59:59.999`);
-    return Llave.find({ estado: 'en_prestamo', fecha_entrega: { $gte: start, $lte: end } }).lean();
+    return Llave.find({ estado: 'en_prestamo', fecha_hora_entrega: { $gte: start, $lte: end } }).lean();
   }
 
   async findHistorial(filters = {}, pagination = null) {
@@ -28,11 +28,11 @@ class LlaveRepository {
     if (filters.fecha) {
       const start = new Date(`${filters.fecha}T00:00:00`);
       const end = new Date(`${filters.fecha}T23:59:59.999`);
-      query.fecha_entrega = { $gte: start, $lte: end };
+      query.fecha_hora_entrega = { $gte: start, $lte: end };
     }
     if (filters.documento) query.numero_documento = filters.documento;
     if (filters.estado) query.estado = filters.estado;
-    return applyPagination(Llave.find(query).sort({ fecha_entrega: -1 }), pagination);
+    return applyPagination(Llave.find(query).sort({ fecha_hora_entrega: -1 }), pagination);
   }
 
   async create(registro) {
