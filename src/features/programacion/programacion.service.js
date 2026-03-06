@@ -36,7 +36,8 @@ class ProgramacionService {
       throw Object.assign(new Error('No se encontraron registros válidos en el archivo'), { statusCode: 400 });
     }
 
-    return programacionRepository.bulkInsert(limpios);
+    const consolidados = this._unificarHorarios(limpios);
+    return programacionRepository.bulkInsert(consolidados);
   }
 
   _limpiarProgramacion(rows) {
@@ -68,6 +69,8 @@ class ProgramacionService {
       'nro_estudiantes_premat': 'estudiantes_prematriculados',
       'nro_estudiantes': 'estudiantes_matriculados',
       'total_estudiantes': 'total_estudiantes',
+      'semestre': 'semestre',
+      'Semestre': 'semestre',
     };
 
     return rows
@@ -124,6 +127,62 @@ class ProgramacionService {
 
   _esRegistroValido(r) {
     return !!(r.numero_documento && r.docente && r.dia && r.aula);
+  }
+
+  _unificarHorarios(registros) {
+    const CAMPOS_AGRUPACION = [
+      'semestre', 'codigo_materia', 'grupo', 'nivel_grupo',
+      'numero_documento', 'dia', 'aula', 'facultad',
+    ];
+
+    const grupos = new Map();
+    for (const reg of registros) {
+      const clave = CAMPOS_AGRUPACION.map((c) => String(reg[c] || '').toUpperCase()).join('|');
+      if (!grupos.has(clave)) grupos.set(clave, []);
+      grupos.get(clave).push(reg);
+    }
+
+    const resultado = [];
+
+    for (const bloques of grupos.values()) {
+      bloques.sort((a, b) => {
+        const minA = horaAMinutos(a.hora_inicio || '00:00') ?? 0;
+        const minB = horaAMinutos(b.hora_inicio || '00:00') ?? 0;
+        return minA - minB;
+      });
+
+      let actual = { ...bloques[0] };
+
+      for (let i = 1; i < bloques.length; i++) {
+        const siguiente = bloques[i];
+        const finActual = horaAMinutos(actual.hora_fin || '00:00');
+        const inicioSiguiente = horaAMinutos(siguiente.hora_inicio || '00:00');
+
+        if (finActual !== null && inicioSiguiente !== null && finActual === inicioSiguiente) {
+          actual.hora_fin = siguiente.hora_fin;
+          actual.horario = `${actual.hora_inicio} A ${actual.hora_fin}`;
+          actual.estudiantes_prematriculados = Math.max(
+            actual.estudiantes_prematriculados || 0,
+            siguiente.estudiantes_prematriculados || 0,
+          );
+          actual.estudiantes_matriculados = Math.max(
+            actual.estudiantes_matriculados || 0,
+            siguiente.estudiantes_matriculados || 0,
+          );
+          actual.total_estudiantes = Math.max(
+            actual.total_estudiantes || 0,
+            siguiente.total_estudiantes || 0,
+          );
+        } else {
+          resultado.push(actual);
+          actual = { ...siguiente };
+        }
+      }
+
+      resultado.push(actual);
+    }
+
+    return resultado;
   }
 }
 
