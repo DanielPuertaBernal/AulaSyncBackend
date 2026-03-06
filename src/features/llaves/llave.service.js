@@ -2,6 +2,7 @@
 const llaveRepository = require('./llave.repository');
 const docenteRepository = require('../docentes/docente.repository');
 const programacionRepository = require('../programacion/programacion.repository');
+const monitorRepository = require('../monitores/monitor.repository');
 const { generateExcel } = require('../../shared/utils/excel.parser');
 const {
   getFechaHoy,
@@ -44,58 +45,47 @@ class LlaveService {
   }
 
   /**
-   * Procesa una lectura NFC: determina si es préstamo o devolución
+   * Procesa una lectura NFC: identifica docente o monitor, determina préstamo/devolución
    */
   async procesarLecturaNFC(idCarnet) {
-    const docente = await docenteRepository.findByCarnet(idCarnet);
-    if (!docente) {
-      return { tipo: 'error', mensaje: 'Docente no encontrado para este carnet' };
+    const persona = await docenteRepository.findByCarnet(idCarnet);
+    if (!persona) {
+      return { tipo: 'error', mensaje: 'Persona no encontrada para este carnet' };
     }
 
-    const documento = String(docente.numero_documento).replace('.0', '');
+    const documento = String(persona.numero_documento).replace('.0', '');
 
-    // Si ya tiene llave prestada → devolución automática
-    const prestamoActivo = await llaveRepository.findPendienteByDocumento(documento);
-    if (prestamoActivo) {
-      const result = await this._ejecutarDevolucion(prestamoActivo);
-      return { tipo: 'devolucion', ...result, docente };
+    // Verificar si es docente con clase hoy, o monitor autorizado
+    const ctx = await this._resolverContextoNFC(persona, documento);
+
+    // Si es docente o monitor con llave prestada del docente → devolución
+    if (ctx.prestamoActivo) {
+      const result = await this._ejecutarDevolucion(ctx.prestamoActivo, {
+        quien: ctx.rol,
+        documento,
+        nombre: persona.nombre,
+      });
+      return { tipo: 'devolucion', ...result, docente: ctx.docente, persona, rol: ctx.rol };
     }
 
-    // Buscar clases programadas hoy
-    const diaActual = getDiaActual();
-    const clases = await programacionRepository.findByDia(diaActual);
-    const clasesDocente = clases.filter(
-      (c) => String(c.numero_documento).replace('.0', '') === documento
-    );
-
-    if (!clasesDocente.length) {
-      return { tipo: 'sin_clase', mensaje: 'El docente no tiene clases programadas para hoy', docente };
+    if (!ctx.clasesDisponibles.length) {
+      return {
+        tipo: 'sin_clase',
+        mensaje: ctx.mensajeSinClase || 'No hay clases disponibles',
+        docente: ctx.docente,
+        persona,
+        rol: ctx.rol,
+      };
     }
 
-    // Filtrar clases ya procesadas
-    const registrosHoy = await llaveRepository.findByFecha(getFechaHoy());
-    const horariosProcessados = registrosHoy
-      .filter((r) => String(r.numero_documento).replace('.0', '') === documento)
-      .map((r) => String(r.horario || '').trim());
-
-    const clasesDisponibles = clasesDocente.filter(
-      (c) => !horariosProcessados.includes(String(c.horario || '').trim())
-    );
-
-    if (!clasesDisponibles.length) {
-      return { tipo: 'sin_clase', mensaje: 'Todas las clases de hoy ya fueron procesadas', docente };
-    }
-
-    // Encontrar clase actual o próxima (dentro de 1h)
     const ahora = new Date();
     const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
-    const claseTarget = this._encontrarClaseActual(clasesDisponibles, minutosAhora);
+    const claseTarget = this._encontrarClaseActual(ctx.clasesDisponibles, minutosAhora);
 
     if (!claseTarget) {
-      return { tipo: 'sin_clase', mensaje: 'No hay clases en el horario actual o próximo', docente };
+      return { tipo: 'sin_clase', mensaje: 'No hay clases en el horario actual o próximo', docente: ctx.docente, persona, rol: ctx.rol };
     }
 
-    // Determinar si es anticipado o normal
     const anticipado = esReclamoAnticipado(claseTarget.horario, ahora);
     const tiempoRetraso = calcularTiempoRetraso(claseTarget.horario, ahora);
     const seReclamoATiempo = !tiempoRetraso;
@@ -103,18 +93,25 @@ class LlaveService {
     if (anticipado) {
       return {
         tipo: 'anticipado',
-        docente,
+        docente: ctx.docente,
+        persona,
+        rol: ctx.rol,
         clase: claseTarget,
         se_reclamo_a_tiempo: true,
-        mensaje: 'El docente está reclamando la llave con anticipación',
+        mensaje: `${ctx.rol === 'monitor' ? 'El monitor' : 'El docente'} está reclamando la llave con anticipación`,
       };
     }
 
-    // Registrar préstamo automáticamente
-    const registro = await this._ejecutarPrestamo(docente, claseTarget, seReclamoATiempo, tiempoRetraso);
+    const registro = await this._ejecutarPrestamo(ctx.docente, claseTarget, seReclamoATiempo, tiempoRetraso, {
+      quien: ctx.rol,
+      documento,
+      nombre: persona.nombre,
+    });
     return {
       tipo: 'prestamo',
-      docente,
+      docente: ctx.docente,
+      persona,
+      rol: ctx.rol,
       clase: claseTarget,
       registro,
       se_reclamo_a_tiempo: seReclamoATiempo,
@@ -123,29 +120,149 @@ class LlaveService {
   }
 
   /**
+   * Resuelve si quien escanea es docente directo o monitor, y encuentra sus clases disponibles
+   */
+  async _resolverContextoNFC(persona, documento) {
+    const diaActual = getDiaActual();
+    const todasClases = await programacionRepository.findByDia(diaActual);
+    const registrosHoy = await llaveRepository.findByFecha(getFechaHoy());
+
+    // 1) Verificar como docente directo
+    const clasesDocente = todasClases.filter(
+      (c) => String(c.numero_documento).replace('.0', '') === documento
+    );
+
+    if (clasesDocente.length) {
+      const prestamoActivo = await llaveRepository.findPendienteByDocumento(documento);
+      if (prestamoActivo) {
+        return { rol: 'docente', docente: persona, prestamoActivo, clasesDisponibles: [] };
+      }
+
+      const horariosProcessados = registrosHoy
+        .filter((r) => String(r.numero_documento).replace('.0', '') === documento)
+        .map((r) => String(r.horario || '').trim());
+
+      const clasesNoProcessadas = clasesDocente.filter(
+        (c) => !this._horarioCubiertoPorPrestamo(String(c.horario || '').trim(), horariosProcessados)
+      );
+      const clasesDisponibles = this._agruparClasesConsecutivas(clasesNoProcessadas);
+
+      if (!clasesDisponibles.length) {
+        return { rol: 'docente', docente: persona, prestamoActivo: null, clasesDisponibles: [], mensajeSinClase: 'Todas las clases de hoy ya fueron procesadas' };
+      }
+      return { rol: 'docente', docente: persona, prestamoActivo: null, clasesDisponibles };
+    }
+
+    // 2) Verificar como monitor
+    const asignaciones = await monitorRepository.findByDocumentoMonitor(documento);
+    if (!asignaciones.length) {
+      return { rol: 'docente', docente: persona, prestamoActivo: null, clasesDisponibles: [], mensajeSinClase: 'No tiene clases programadas hoy ni es monitor autorizado' };
+    }
+
+    // Verificar devolución: buscar préstamos activos de los docentes a los que monitorea
+    for (const asig of asignaciones) {
+      const docDoc = String(asig.numero_documento_docente).replace('.0', '');
+      const prestamoActivo = await llaveRepository.findPendienteByDocumento(docDoc);
+      if (prestamoActivo) {
+        const docente = await docenteRepository.findByDocumento(docDoc);
+        return { rol: 'monitor', docente: docente || { numero_documento: docDoc, nombre: asig.nombre_docente }, prestamoActivo, clasesDisponibles: [] };
+      }
+    }
+
+    // Buscar clases disponibles del monitor para hoy
+    const clasesMonitor = [];
+    for (const asig of asignaciones) {
+      const docDoc = String(asig.numero_documento_docente).replace('.0', '');
+      const clasesDelDocente = todasClases.filter(
+        (c) => String(c.numero_documento).replace('.0', '') === docDoc
+          && this._matchMonitorClase(asig, c)
+      );
+
+      const horariosProcessados = registrosHoy
+        .filter((r) => String(r.numero_documento).replace('.0', '') === docDoc)
+        .map((r) => String(r.horario || '').trim());
+
+      const disponibles = clasesDelDocente.filter(
+        (c) => !this._horarioCubiertoPorPrestamo(String(c.horario || '').trim(), horariosProcessados)
+      );
+      clasesMonitor.push(...disponibles);
+    }
+
+    const clasesMonitorAgrupadas = this._agruparClasesConsecutivas(clasesMonitor);
+
+    if (!clasesMonitorAgrupadas.length) {
+      return { rol: 'monitor', docente: persona, prestamoActivo: null, clasesDisponibles: [], mensajeSinClase: 'No hay clases disponibles para este monitor hoy' };
+    }
+
+    const primerDocDoc = String(clasesMonitorAgrupadas[0].numero_documento).replace('.0', '');
+    const docenteTitular = await docenteRepository.findByDocumento(primerDocDoc);
+
+    return { rol: 'monitor', docente: docenteTitular || persona, prestamoActivo: null, clasesDisponibles: clasesMonitorAgrupadas };
+  }
+
+  _matchMonitorClase(asignacion, clase) {
+    const materiaMatch = String(asignacion.materia || '').trim().toLowerCase() ===
+      String(clase.materia || '').trim().toLowerCase();
+    if (!materiaMatch) return false;
+    if (asignacion.dia && asignacion.horario) {
+      return String(asignacion.horario || '').trim() === String(clase.horario || '').trim();
+    }
+    return true;
+  }
+
+  /**
    * Confirma un préstamo anticipado tras aprobación del usuario
    */
-  async confirmarPrestamoAnticipado({ id_carnet, horario, aula }) {
-    const docente = await docenteRepository.findByCarnet(id_carnet);
-    if (!docente) throw Object.assign(new Error('Docente no encontrado'), { statusCode: 404 });
+  async confirmarPrestamoAnticipado({ id_carnet, horario, aula, rol, documento_persona, nombre_persona }) {
+    const persona = await docenteRepository.findByCarnet(id_carnet);
+    if (!persona) throw Object.assign(new Error('Persona no encontrada'), { statusCode: 404 });
 
-    const documento = String(docente.numero_documento).replace('.0', '');
-    const existing = await llaveRepository.findPendienteByDocumento(documento);
-    if (existing) throw Object.assign(new Error('El docente ya tiene una llave prestada'), { statusCode: 409 });
+    const docDocumento = String(persona.numero_documento).replace('.0', '');
+    const esMonitor = rol === 'monitor';
 
+    // Buscar el docente titular de la clase
     const diaActual = getDiaActual();
     const clases = await programacionRepository.findByDia(diaActual);
-    const clase = clases.find(
-      (c) =>
-        String(c.numero_documento).replace('.0', '') === documento &&
-        String(c.horario || '').trim() === String(horario || '').trim() &&
-        String(c.aula || '').trim() === String(aula || '').trim()
-    );
+    let clase = null;
+    let docenteDoc = docDocumento;
+
+    if (esMonitor) {
+      const asignaciones = await monitorRepository.findByDocumentoMonitor(docDocumento);
+      for (const asig of asignaciones) {
+        const dd = String(asig.numero_documento_docente).replace('.0', '');
+        const clasesEnAula = clases.filter(
+          (c) => String(c.numero_documento).replace('.0', '') === dd &&
+            String(c.aula || '').trim().toUpperCase() === String(aula || '').trim().toUpperCase()
+        );
+        const agrupadas = this._agruparClasesConsecutivas(clasesEnAula);
+        clase = agrupadas.find(
+          (c) => String(c.horario || '').trim() === String(horario || '').trim()
+        );
+        if (clase) { docenteDoc = dd; break; }
+      }
+    } else {
+      const clasesEnAula = clases.filter(
+        (c) => String(c.numero_documento).replace('.0', '') === docDocumento &&
+          String(c.aula || '').trim().toUpperCase() === String(aula || '').trim().toUpperCase()
+      );
+      const agrupadas = this._agruparClasesConsecutivas(clasesEnAula);
+      clase = agrupadas.find(
+        (c) => String(c.horario || '').trim() === String(horario || '').trim()
+      );
+    }
 
     if (!clase) throw Object.assign(new Error('Clase no encontrada en la programación'), { statusCode: 404 });
 
-    const registro = await this._ejecutarPrestamo(docente, clase, true, '');
-    return { ok: true, mensaje: `Llave entregada a ${docente.nombre}`, registro, docente };
+    const existing = await llaveRepository.findPendienteByDocumento(docenteDoc);
+    if (existing) throw Object.assign(new Error('Ya hay una llave prestada para este docente'), { statusCode: 409 });
+
+    const docente = await docenteRepository.findByDocumento(docenteDoc);
+    const registro = await this._ejecutarPrestamo(docente || persona, clase, true, '', {
+      quien: rol || 'docente',
+      documento: documento_persona || docDocumento,
+      nombre: nombre_persona || persona.nombre,
+    });
+    return { ok: true, mensaje: `Llave entregada a ${(docente || persona).nombre}`, registro, docente: docente || persona };
   }
 
   /**
@@ -182,6 +299,12 @@ class LlaveService {
       tiempo_retraso: '',
       retraso_entrega: false,
       tiempo_retraso_devolucion: '',
+      quien_reclama: 'docente',
+      numero_documento_reclama: documento,
+      nombre_reclama: infoClase.profesor || '',
+      quien_entrega: '',
+      numero_documento_entrega: '',
+      nombre_entrega: '',
       estado: 'en_prestamo',
     };
 
@@ -232,7 +355,7 @@ class LlaveService {
     return mejorClase;
   }
 
-  async _ejecutarPrestamo(docente, clase, seReclamoATiempo, tiempoRetraso) {
+  async _ejecutarPrestamo(docente, clase, seReclamoATiempo, tiempoRetraso, reclamaInfo = {}) {
     const ahora = new Date();
     const registro = {
       numero_documento: String(docente.numero_documento).replace('.0', ''),
@@ -250,12 +373,18 @@ class LlaveService {
       tiempo_retraso: tiempoRetraso || '',
       retraso_entrega: false,
       tiempo_retraso_devolucion: '',
+      quien_reclama: reclamaInfo.quien || 'docente',
+      numero_documento_reclama: reclamaInfo.documento || String(docente.numero_documento).replace('.0', ''),
+      nombre_reclama: reclamaInfo.nombre || docente.nombre || '',
+      quien_entrega: '',
+      numero_documento_entrega: '',
+      nombre_entrega: '',
       estado: 'en_prestamo',
     };
     return llaveRepository.create(registro);
   }
 
-  async _ejecutarDevolucion(registro) {
+  async _ejecutarDevolucion(registro, entregaInfo = {}) {
     const ahora = new Date();
     const duracion = calcularDuracion(registro.fecha_hora_entrega, ahora);
     const duracionClase = calcularDuracionClase(registro.horario, ahora);
@@ -264,7 +393,6 @@ class LlaveService {
       : getFechaHoy();
     const retrasoDevolucion = calcularRetrasoDevolucion(registro.horario, fechaStr, ahora);
 
-    // Verificar si excedió el límite de horas
     const horasTranscurridas = registro.fecha_hora_entrega
       ? (ahora - registro.fecha_hora_entrega) / (1000 * 60 * 60)
       : 0;
@@ -277,10 +405,82 @@ class LlaveService {
       tiempo_retraso_devolucion: retrasoDevolucion,
       retraso_entrega: !!retrasoDevolucion,
       estado: esDemora ? 'demora_entrega' : 'entregado',
+      quien_entrega: entregaInfo.quien || 'docente',
+      numero_documento_entrega: entregaInfo.documento || registro.numero_documento,
+      nombre_entrega: entregaInfo.nombre || registro.docente,
     };
 
     const updated = await llaveRepository.update(registro._id, updates);
-    return { mensaje: `Llave devuelta por ${registro.docente}`, registro: updated };
+    return { mensaje: `Llave devuelta por ${entregaInfo.nombre || registro.docente}`, registro: updated };
+  }
+
+  _horarioCubiertoPorPrestamo(horarioClase, horariosProcessados) {
+    const partes = String(horarioClase || '').toUpperCase().split(' A ');
+    const claseInicio = horaAMinutos(partes[0]?.trim());
+    const claseFin = horaAMinutos(partes[1]?.trim());
+    if (claseInicio === null || claseFin === null) return false;
+
+    return horariosProcessados.some((hp) => {
+      const p = String(hp || '').toUpperCase().split(' A ');
+      const pInicio = horaAMinutos(p[0]?.trim());
+      const pFin = horaAMinutos(p[1]?.trim());
+      if (pInicio === null || pFin === null) return false;
+      return claseInicio >= pInicio && claseFin <= pFin;
+    });
+  }
+
+  _agruparClasesConsecutivas(clases) {
+    const grupos = new Map();
+    for (const c of clases) {
+      const doc = String(c.numero_documento || '').replace('.0', '');
+      const aula = String(c.aula || '').trim().toUpperCase();
+      const key = `${doc}||${aula}`;
+      if (!grupos.has(key)) grupos.set(key, []);
+      grupos.get(key).push(c);
+    }
+
+    const resultado = [];
+    for (const bloques of grupos.values()) {
+      if (bloques.length === 1) {
+        resultado.push(bloques[0]);
+        continue;
+      }
+
+      bloques.sort((a, b) => {
+        const ha = String(a.horario || '').toUpperCase().split(' A ')[0]?.trim();
+        const hb = String(b.horario || '').toUpperCase().split(' A ')[0]?.trim();
+        return (horaAMinutos(ha) ?? 0) - (horaAMinutos(hb) ?? 0);
+      });
+
+      let actual = { ...bloques[0] };
+      let materias = [actual.materia || ''];
+
+      for (let i = 1; i < bloques.length; i++) {
+        const sig = bloques[i];
+        const finActualStr = String(actual.horario || '').toUpperCase().split(' A ')[1]?.trim();
+        const inicioSigStr = String(sig.horario || '').toUpperCase().split(' A ')[0]?.trim();
+        const finActual = horaAMinutos(finActualStr);
+        const inicioSig = horaAMinutos(inicioSigStr);
+
+        if (finActual !== null && inicioSig !== null && finActual === inicioSig) {
+          const horaIni = String(actual.horario || '').toUpperCase().split(' A ')[0]?.trim();
+          const horaFin = String(sig.horario || '').toUpperCase().split(' A ')[1]?.trim();
+          actual.horario = `${horaIni} A ${horaFin}`;
+          actual.hora_fin = horaFin;
+          materias.push(sig.materia || '');
+        } else {
+          actual.materia = [...new Set(materias.filter(Boolean))].join(', ');
+          resultado.push(actual);
+          actual = { ...sig };
+          materias = [sig.materia || ''];
+        }
+      }
+
+      actual.materia = [...new Set(materias.filter(Boolean))].join(', ');
+      resultado.push(actual);
+    }
+
+    return resultado;
   }
 
   _toClientFormat(r) {
@@ -306,6 +506,12 @@ class LlaveService {
       tiempoRetraso: r.tiempo_retraso,
       retrasoEntrega: r.retraso_entrega,
       tiempoRetrasoDevolucion: r.tiempo_retraso_devolucion,
+      quienReclama: r.quien_reclama || '',
+      documentoReclama: r.numero_documento_reclama || '',
+      nombreReclama: r.nombre_reclama || '',
+      quienEntrega: r.quien_entrega || '',
+      documentoEntrega: r.numero_documento_entrega || '',
+      nombreEntrega: r.nombre_entrega || '',
       estado: r.estado,
     };
   }

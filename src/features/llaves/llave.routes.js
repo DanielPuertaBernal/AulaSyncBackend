@@ -26,6 +26,9 @@ const confirmarAnticipadoSchema = z.object({
   id_carnet: z.string().min(1, 'id_carnet requerido'),
   horario: z.string().min(1, 'horario requerido'),
   aula: z.string().min(1, 'aula requerida'),
+  rol: z.enum(['docente', 'monitor']).optional().default('docente'),
+  documento_persona: z.string().optional().default(''),
+  nombre_persona: z.string().optional().default(''),
 });
 
 router.get('/pendientes', ...requireAuth, (req, res) => llaveController.pendientes(req, res));

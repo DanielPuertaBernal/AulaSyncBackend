@@ -31,14 +31,16 @@ class NFCService {
   }
 
   _generarMensaje(resultado) {
-    const nombre = resultado.docente?.nombre || 'Desconocido';
+    const nombre = resultado.persona?.nombre || resultado.docente?.nombre || 'Desconocido';
+    const esMonitor = resultado.rol === 'monitor';
+    const prefijo = esMonitor ? `Monitor ${nombre}` : nombre;
     switch (resultado.tipo) {
       case 'prestamo':
-        return `Llave entregada a ${nombre}`;
+        return `Llave entregada a ${prefijo}`;
       case 'devolucion':
-        return `Llave devuelta por ${nombre}`;
+        return `Llave devuelta por ${prefijo}`;
       case 'anticipado':
-        return `Reclamo anticipado de ${nombre}`;
+        return `Reclamo anticipado de ${prefijo}`;
       case 'sin_clase':
         return resultado.mensaje;
       default:
