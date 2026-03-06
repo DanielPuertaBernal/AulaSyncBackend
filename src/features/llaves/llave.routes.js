@@ -11,10 +11,11 @@ const entregarSchema = z.object({
   nroidenti: z.string().min(1, 'Documento requerido'),
   profesor: z.string().min(1, 'Profesor requerido'),
   aula: z.string().min(1, 'Aula requerida'),
-  horario: z.string().optional().default(''),
+  hora_inicio: z.string().optional().default(''),
+  hora_fin: z.string().optional().default(''),
   dia: z.string().optional().default(''),
   facultad: z.string().optional().default('No especificada'),
-  materia: z.string().optional().default(''),
+  motivo: z.string().optional().default(''),
 });
 
 const procesarNFCSchema = z.object({
