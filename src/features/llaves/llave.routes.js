@@ -17,11 +17,23 @@ const entregarSchema = z.object({
   materia: z.string().optional().default(''),
 });
 
+const procesarNFCSchema = z.object({
+  id_carnet: z.string().min(1, 'id_carnet requerido'),
+});
+
+const confirmarAnticipadoSchema = z.object({
+  id_carnet: z.string().min(1, 'id_carnet requerido'),
+  horario: z.string().min(1, 'horario requerido'),
+  aula: z.string().min(1, 'aula requerida'),
+});
+
 router.get('/pendientes', ...requireAuth, (req, res) => llaveController.pendientes(req, res));
 router.get('/dia', ...requireAuth, (req, res) => llaveController.pendientesHoy(req, res));
 router.get('/historial', ...requireAuth, (req, res) => llaveController.historial(req, res));
 router.get('/historial/exportar', ...requireAuth, (req, res) => llaveController.exportarHistorial(req, res));
 router.get('/clases-hoy', ...requireAuth, (req, res) => llaveController.clasesProcesadasHoy(req, res));
+router.post('/procesar-nfc', ...requireAuth, validate(procesarNFCSchema), (req, res) => llaveController.procesarNFC(req, res));
+router.post('/confirmar-anticipado', ...requireAuth, validate(confirmarAnticipadoSchema), (req, res) => llaveController.confirmarAnticipado(req, res));
 router.post('/entregar', ...requireAuth, validate(entregarSchema), (req, res) => llaveController.entregar(req, res));
 router.post('/devolver/:documento', ...requireAuth, (req, res) => llaveController.devolver(req, res));
 

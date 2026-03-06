@@ -29,6 +29,21 @@ class LlaveController {
     return res.json({ ok: true, data: { clases } });
   }
 
+  async procesarNFC(req, res) {
+    const { id_carnet } = req.body;
+    const result = await llaveService.procesarLecturaNFC(id_carnet);
+    return res.json({ ok: true, data: result });
+  }
+
+  async confirmarAnticipado(req, res) {
+    const result = await llaveService.confirmarPrestamoAnticipado(req.body);
+    return res.status(201).json({
+      ok: true,
+      message: result.mensaje,
+      data: { registro: result.registro, docente: result.docente },
+    });
+  }
+
   async entregar(req, res) {
     const result = await llaveService.registrarEntrega(req.body);
     return res.status(201).json({ ok: true, message: result.mensaje, data: { registro: result.registro } });

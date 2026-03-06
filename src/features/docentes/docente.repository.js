@@ -36,7 +36,7 @@ class DocenteRepository {
     const result = await Docente.bulkWrite(ops, { ordered: false });
     return {
       insertados: result.upsertedCount,
-      actualizados: result.modifiedCount,
+      actualizados: result.matchedCount - result.upsertedCount,
     };
   }
 }

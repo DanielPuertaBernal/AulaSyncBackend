@@ -36,6 +36,9 @@ class NFCGateway extends EventEmitter {
 
       socket.on('nfc:start', () => this._startListening(nsp));
       socket.on('nfc:stop', () => this._stopListening(nsp));
+      socket.on('nfc:simulate', ({ codigo }) => {
+        if (codigo) this.simularLectura(codigo);
+      });
       socket.on('disconnect', () => {
         console.log(`🔌 Cliente NFC desconectado: ${socket.id}`);
       });
@@ -120,6 +123,17 @@ class NFCGateway extends EventEmitter {
    */
   simularLectura(codigo) {
     this._handleNFCRead(codigo);
+  }
+
+  /**
+   * Emite resultado de lectura procesada al frontend (usado por NFC HTTP endpoint)
+   * @param {object} data
+   */
+  emitirLectura(data) {
+    if (this._io) {
+      this._io.of('/nfc').emit('nfc:resultado', data);
+    }
+    this.emit('resultado', data);
   }
 }
 

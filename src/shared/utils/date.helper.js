@@ -151,6 +151,71 @@ function tieneGapMinimo(clasesDocente, nuevaHoraInicio, gapMinutos = 30) {
   return (inicioNueva - finUltima) >= gapMinutos;
 }
 
+/**
+ * Verifica si el reclamo es anticipado (más de 1 hora antes del inicio de la clase)
+ * Dentro de 1h antes se considera reclamo normal a tiempo
+ * @param {string} horario  Ej: "07:00 A 09:00"
+ * @param {Date} ahora
+ * @returns {boolean}
+ */
+function esReclamoAnticipado(horario, ahora = new Date()) {
+  try {
+    if (!horario) return false;
+    const partes = String(horario).toUpperCase().split(' A ');
+    if (partes.length < 1) return false;
+    const horaInicio = horaAMinutos(partes[0].trim());
+    if (horaInicio === null) return false;
+    const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
+    return minutosAhora < horaInicio - 60;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Calcula duración desde el inicio de la clase hasta la devolución
+ * @param {string} horario  Ej: "07:00 A 09:00"
+ * @param {Date} fechaDevolucion
+ * @returns {string}
+ */
+function calcularDuracionClase(horario, fechaDevolucion = new Date()) {
+  try {
+    if (!horario) return '';
+    const partes = String(horario).toUpperCase().split(' A ');
+    if (partes.length < 1) return '';
+    const horaInicio = horaAMinutos(partes[0].trim());
+    if (horaInicio === null) return '';
+    const minutosDevolucion = fechaDevolucion.getHours() * 60 + fechaDevolucion.getMinutes();
+    const diffMin = minutosDevolucion - horaInicio;
+    if (diffMin <= 0) return '0h 0min';
+    return `${Math.floor(diffMin / 60)}h ${diffMin % 60}min`;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Calcula tiempo de retraso al reclamar llave después del inicio de clase
+ * @param {string} horario  Ej: "07:00 A 09:00"
+ * @param {Date} ahora
+ * @returns {string}
+ */
+function calcularTiempoRetraso(horario, ahora = new Date()) {
+  try {
+    if (!horario) return '';
+    const partes = String(horario).toUpperCase().split(' A ');
+    if (partes.length < 1) return '';
+    const horaInicio = horaAMinutos(partes[0].trim());
+    if (horaInicio === null) return '';
+    const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
+    const diff = minutosAhora - horaInicio;
+    if (diff <= 0) return '';
+    return `${Math.floor(diff / 60)}h ${diff % 60}min`;
+  } catch {
+    return '';
+  }
+}
+
 module.exports = {
   getDiaActual,
   getFechaHoy,
@@ -160,6 +225,9 @@ module.exports = {
   evaluarReclamoTiempo,
   calcularRetrasoDevolucion,
   calcularDuracion,
+  calcularDuracionClase,
+  calcularTiempoRetraso,
+  esReclamoAnticipado,
   tieneGapMinimo,
   DIAS_ES,
 };
