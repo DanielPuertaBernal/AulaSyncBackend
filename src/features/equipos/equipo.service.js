@@ -47,9 +47,47 @@ class EquipoService {
   }
 
   async actualizar(id, datos) {
-    const updated = await equipoRepository.update(id, datos);
+    const actual = await equipoRepository.findById(id);
+    if (!actual) throw Object.assign(new Error('Equipo no encontrado'), { statusCode: 404 });
+
+    const updates = { ...datos };
+
+    if (updates.codigo_inventario) {
+      updates.codigo_inventario = String(updates.codigo_inventario).trim();
+      if (updates.codigo_inventario !== actual.codigo_inventario) {
+        const existing = await equipoRepository.findByCodigo(updates.codigo_inventario);
+        if (existing && String(existing._id) !== String(id)) {
+          throw Object.assign(
+            new Error(`Ya existe un equipo con código '${updates.codigo_inventario}'`),
+            { statusCode: 409 }
+          );
+        }
+      }
+    }
+
+    if (updates.consecutivo !== undefined) {
+      updates.consecutivo = parseInt(updates.consecutivo, 10);
+      if (Number.isNaN(updates.consecutivo)) {
+        throw Object.assign(new Error('Consecutivo inválido'), { statusCode: 400 });
+      }
+    }
+
+    const codigoInventarioFinal = updates.codigo_inventario || actual.codigo_inventario;
+    const consecutivoFinal = updates.consecutivo !== undefined ? updates.consecutivo : actual.consecutivo;
+    if (updates.codigo_inventario || updates.consecutivo !== undefined) {
+      const codigoBase = String(codigoInventarioFinal).split('-')[0] || codigoInventarioFinal;
+      updates.codigo_barras = `INV-${codigoBase}-${String(consecutivoFinal).padStart(3, '0')}`;
+    }
+
+    const updated = await equipoRepository.update(id, updates);
     if (!updated) throw Object.assign(new Error('Equipo no encontrado'), { statusCode: 404 });
     return updated;
+  }
+
+  async eliminar(id) {
+    const deleted = await equipoRepository.deleteById(id);
+    if (!deleted) throw Object.assign(new Error('Equipo no encontrado'), { statusCode: 404 });
+    return { ok: true };
   }
 
   estaDisponible(equipo) { return equipo.estado === 'activo'; }

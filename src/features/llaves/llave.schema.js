@@ -13,11 +13,11 @@ const llaveSchema = new mongoose.Schema(
     fecha_hora_entrega: { type: Date, default: null, index: true },
     fecha_hora_devolucion: { type: Date, default: null },
     duracion: { type: String, default: '' },
-    duracion_clase: { type: String, default: '' },
     se_reclamo_a_tiempo: { type: Boolean, default: false },
     tiempo_retraso: { type: String, default: '' },
     retraso_entrega: { type: Boolean, default: false },
     tiempo_retraso_devolucion: { type: String, default: '' },
+    tipo_entrega: { type: String, enum: ['manual', 'carnet', ''], default: '' },
     // Quién reclamó la llave
     quien_reclama: { type: String, enum: ['docente', 'monitor', ''], default: '' },
     numero_documento_reclama: { type: String, default: '' },

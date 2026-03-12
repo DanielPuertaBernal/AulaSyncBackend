@@ -18,8 +18,10 @@ const crearSchema = z.object({
 const actualizarSchema = z.object({
   nombre: z.string().min(1).optional(),
   marca: z.string().optional(),
+  consecutivo: z.union([z.string(), z.number()]).optional(),
+  codigo_inventario: z.string().min(1).optional(),
   descripcion: z.string().optional(),
-  estado: z.enum(['activo', 'inactivo']).optional(),
+  estado: z.enum(['activo', 'inactivo', 'mantenimiento']).optional(),
 }).strict();
 
 router.get('/', ...requireAuth, (req, res) => equipoController.listar(req, res));
@@ -27,5 +29,6 @@ router.get('/disponibles', ...requireAuth, (req, res) => equipoController.dispon
 router.get('/barcode/:codigo', ...requireAuth, (req, res) => equipoController.buscarPorBarcode(req, res));
 router.post('/', ...requireAuth, validate(crearSchema), (req, res) => equipoController.crear(req, res));
 router.patch('/:id', ...requireAuth, validate(actualizarSchema), (req, res) => equipoController.actualizar(req, res));
+router.delete('/:id', ...requireAuth, (req, res) => equipoController.eliminar(req, res));
 
 module.exports = router;

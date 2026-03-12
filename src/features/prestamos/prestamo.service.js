@@ -35,17 +35,7 @@ class PrestamoService {
     try {
       session.startTransaction();
 
-      // Validar disponibilidad dentro de la transacción
-      for (const id of equiposIds) {
-        const prestado = await prestamoRepository.verificarEquipoPrestado(id, session);
-        if (prestado) {
-          const eq = await equipoRepository.findById(id);
-          throw Object.assign(
-            new Error(`El equipo '${eq?.nombre || id}' ya está prestado`),
-            { statusCode: 409 }
-          );
-        }
-      }
+      await this._validarDisponibilidad(equiposIds, session);
 
       const detalles = await Promise.all(
         equiposIds.map(async (id) => {
@@ -60,17 +50,32 @@ class PrestamoService {
             equipo_codigo_barras: equipo.codigo_barras,
             estado_equipo: 'entregado',
             fecha_entrega: new Date(),
+            tipo_entrega: 'manual',
           };
         })
       );
 
-      const prestamo = await prestamoRepository.create({
-        docente_codigo_nfc,
-        docente_nombre,
-        auxiliar_prestamista: auxiliar_prestamista || 'Auxiliar',
-        equipos: detalles,
-        estado: 'activo',
-      }, session);
+      const prestamoAbierto = await prestamoRepository.findActivoByDocente(docente_codigo_nfc, session);
+      let prestamo;
+      if (prestamoAbierto) {
+        prestamo = await prestamoRepository.update(
+          prestamoAbierto._id,
+          {
+            docente_nombre: docente_nombre || prestamoAbierto.docente_nombre,
+            auxiliar_prestamista: auxiliar_prestamista || prestamoAbierto.auxiliar_prestamista || 'Auxiliar',
+            equipos: [...(prestamoAbierto.equipos || []), ...detalles],
+          },
+          session
+        );
+      } else {
+        prestamo = await prestamoRepository.create({
+          docente_codigo_nfc,
+          docente_nombre,
+          auxiliar_prestamista: auxiliar_prestamista || 'Auxiliar',
+          equipos: detalles,
+          estado: 'activo',
+        }, session);
+      }
 
       await session.commitTransaction();
       return prestamo;
@@ -104,6 +109,7 @@ class PrestamoService {
       equipo_codigo_barras: equipo.codigo_barras,
       estado_equipo: 'entregado',
       fecha_entrega: new Date(),
+      tipo_entrega: 'manual',
     };
 
     return prestamoRepository.addEquipo(prestamoId, detalle);
@@ -186,13 +192,27 @@ class PrestamoService {
   }
 
   _normalizarEquipos(equipos) {
-    return equipos.map((item) => {
+    const normalizados = equipos.map((item) => {
       if (typeof item === 'string') return item;
       if (typeof item === 'object') {
         return String(item.equipo_id || item._id || item.id || '');
       }
       return String(item);
     }).filter(Boolean);
+    return [...new Set(normalizados)];
+  }
+
+  async _validarDisponibilidad(equiposIds, session = null) {
+    for (const id of equiposIds) {
+      const prestado = await prestamoRepository.verificarEquipoPrestado(id, session);
+      if (prestado) {
+        const eq = await equipoRepository.findById(id);
+        throw Object.assign(
+          new Error(`El equipo '${eq?.nombre || id}' ya está prestado`),
+          { statusCode: 409 }
+        );
+      }
+    }
   }
 }
 

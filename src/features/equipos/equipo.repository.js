@@ -18,6 +18,10 @@ class EquipoRepository {
     ).lean();
   }
 
+  async deleteById(id) {
+    return Equipo.findByIdAndDelete(id).lean();
+  }
+
   async countByCodigo(codigoBase) {
     const escaped = String(codigoBase).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`^${escaped}-`, 'i');

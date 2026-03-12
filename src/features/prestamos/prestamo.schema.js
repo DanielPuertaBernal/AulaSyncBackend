@@ -17,6 +17,7 @@ const detalleEquipoSchema = new mongoose.Schema(
     fecha_entrega: { type: Date, default: Date.now },
     fecha_devolucion: { type: Date, default: null },
     auxiliar_que_recibio_devolucion: { type: String, default: '' },
+    tipo_entrega: { type: String, enum: ['manual', 'carnet', ''], default: '' },
   },
   { _id: false }
 );
