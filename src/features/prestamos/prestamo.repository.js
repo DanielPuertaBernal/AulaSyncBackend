@@ -4,11 +4,26 @@ const mongoose = require('mongoose');
 
 class PrestamoRepository {
   async findAll() { return Prestamo.find().lean(); }
-  async findActivos() { return Prestamo.find({ estado: 'activo' }).lean(); }
-  async findById(id) { return Prestamo.findById(id).lean(); }
-  async findByDocente(codigoNfc) { return Prestamo.find({ docente_codigo_nfc: codigoNfc }).lean(); }
-  async findActivoByDocente(codigoNfc) {
-    return Prestamo.findOne({ docente_codigo_nfc: codigoNfc, estado: 'activo' }).lean();
+  async findActivos() {
+    return Prestamo.find({ estado: { $in: ['activo', 'parcialmente_devuelto'] } }).lean();
+  }
+  async findById(id, session = null) {
+    const query = Prestamo.findById(id).lean();
+    if (session) query.session(session);
+    return query;
+  }
+  async findByDocente(codigoNfc, session = null) {
+    const query = Prestamo.find({ docente_codigo_nfc: codigoNfc }).lean();
+    if (session) query.session(session);
+    return query;
+  }
+  async findActivoByDocente(codigoNfc, session = null) {
+    const query = Prestamo.findOne({
+      docente_codigo_nfc: codigoNfc,
+      estado: { $in: ['activo', 'parcialmente_devuelto'] },
+    }).lean();
+    if (session) query.session(session);
+    return query;
   }
 
   async create(data, session = null) {

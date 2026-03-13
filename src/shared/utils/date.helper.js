@@ -152,8 +152,8 @@ function tieneGapMinimo(clasesDocente, nuevaHoraInicio, gapMinutos = 30) {
 }
 
 /**
- * Verifica si el reclamo es anticipado (más de 1 hora antes del inicio de la clase)
- * Dentro de 1h antes se considera reclamo normal a tiempo
+ * Verifica si el reclamo es anticipado (más de 30 minutos antes del inicio de la clase)
+ * Dentro de 30 min antes se considera reclamo normal a tiempo
  * @param {string} horario  Ej: "07:00 A 09:00"
  * @param {Date} ahora
  * @returns {boolean}
@@ -166,7 +166,7 @@ function esReclamoAnticipado(horario, ahora = new Date()) {
     const horaInicio = horaAMinutos(partes[0].trim());
     if (horaInicio === null) return false;
     const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
-    return minutosAhora < horaInicio - 60;
+    return minutosAhora < horaInicio - 30;
   } catch {
     return false;
   }

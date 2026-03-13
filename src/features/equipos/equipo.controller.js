@@ -22,6 +22,11 @@ class EquipoController {
     const equipo = await equipoService.buscarPorCodigoBarras(req.params.codigo);
     return res.json({ ok: true, data: { equipo } });
   }
+
+  async eliminar(req, res) {
+    await equipoService.eliminar(req.params.id);
+    return res.json({ ok: true, message: 'Equipo eliminado' });
+  }
 }
 
 module.exports = new EquipoController();

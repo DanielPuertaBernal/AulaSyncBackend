@@ -10,7 +10,6 @@ const {
   horaAMinutos,
   calcularRetrasoDevolucion,
   calcularDuracion,
-  calcularDuracionClase,
   calcularTiempoRetraso,
   esReclamoAnticipado,
 } = require('../../shared/utils/date.helper');
@@ -106,7 +105,7 @@ class LlaveService {
       quien: ctx.rol,
       documento,
       nombre: persona.nombre,
-    });
+    }, 'carnet');
     return {
       tipo: 'prestamo',
       docente: ctx.docente,
@@ -261,7 +260,7 @@ class LlaveService {
       quien: rol || 'docente',
       documento: documento_persona || docDocumento,
       nombre: nombre_persona || persona.nombre,
-    });
+    }, 'manual');
     return { ok: true, mensaje: `Llave entregada a ${(docente || persona).nombre}`, registro, docente: docente || persona };
   }
 
@@ -282,6 +281,8 @@ class LlaveService {
     const horario = (infoClase.hora_inicio && infoClase.hora_fin)
       ? `${infoClase.hora_inicio} A ${infoClase.hora_fin}`
       : '';
+    const tiempoRetraso = horario ? calcularTiempoRetraso(horario, ahora) : '';
+    const seReclamoATiempo = horario ? !tiempoRetraso : true;
 
     const registro = {
       numero_documento: documento,
@@ -294,11 +295,11 @@ class LlaveService {
       fecha_hora_entrega: ahora,
       fecha_hora_devolucion: null,
       duracion: '',
-      duracion_clase: '',
-      se_reclamo_a_tiempo: false,
-      tiempo_retraso: '',
-      retraso_entrega: false,
+      se_reclamo_a_tiempo: seReclamoATiempo,
+      tiempo_retraso: tiempoRetraso,
+      retraso_entrega: !seReclamoATiempo,
       tiempo_retraso_devolucion: '',
+      tipo_entrega: 'manual',
       quien_reclama: 'docente',
       numero_documento_reclama: documento,
       nombre_reclama: infoClase.profesor || '',
@@ -324,7 +325,7 @@ class LlaveService {
 
   async exportarHistorial(filters = {}) {
     const result = await llaveRepository.findHistorial(filters);
-    const registros = result.data || result;
+    const registros = (result.data || result).map((r) => this._toClientFormat(r));
     return generateExcel(registros, 'Historial Llaves');
   }
 
@@ -355,7 +356,7 @@ class LlaveService {
     return mejorClase;
   }
 
-  async _ejecutarPrestamo(docente, clase, seReclamoATiempo, tiempoRetraso, reclamaInfo = {}) {
+  async _ejecutarPrestamo(docente, clase, seReclamoATiempo, tiempoRetraso, reclamaInfo = {}, tipoEntrega = 'carnet') {
     const ahora = new Date();
     const registro = {
       numero_documento: String(docente.numero_documento).replace('.0', ''),
@@ -368,11 +369,11 @@ class LlaveService {
       fecha_hora_entrega: ahora,
       fecha_hora_devolucion: null,
       duracion: '',
-      duracion_clase: '',
       se_reclamo_a_tiempo: seReclamoATiempo,
       tiempo_retraso: tiempoRetraso || '',
       retraso_entrega: false,
       tiempo_retraso_devolucion: '',
+      tipo_entrega: tipoEntrega,
       quien_reclama: reclamaInfo.quien || 'docente',
       numero_documento_reclama: reclamaInfo.documento || String(docente.numero_documento).replace('.0', ''),
       nombre_reclama: reclamaInfo.nombre || docente.nombre || '',
@@ -387,7 +388,6 @@ class LlaveService {
   async _ejecutarDevolucion(registro, entregaInfo = {}) {
     const ahora = new Date();
     const duracion = calcularDuracion(registro.fecha_hora_entrega, ahora);
-    const duracionClase = calcularDuracionClase(registro.horario, ahora);
     const fechaStr = registro.fecha_hora_entrega
       ? registro.fecha_hora_entrega.toISOString().split('T')[0]
       : getFechaHoy();
@@ -401,7 +401,6 @@ class LlaveService {
     const updates = {
       fecha_hora_devolucion: ahora,
       duracion,
-      duracion_clase: duracionClase,
       tiempo_retraso_devolucion: retrasoDevolucion,
       retraso_entrega: !!retrasoDevolucion,
       estado: esDemora ? 'demora_entrega' : 'entregado',
@@ -501,7 +500,6 @@ class LlaveService {
       fechaDevolucion: formatDate(r.fecha_hora_devolucion),
       horaDevolucion: formatTime(r.fecha_hora_devolucion),
       duracion: r.duracion,
-      duracionClase: r.duracion_clase,
       seReclamoATiempo: r.se_reclamo_a_tiempo,
       tiempoRetraso: r.tiempo_retraso,
       retrasoEntrega: r.retraso_entrega,
@@ -512,6 +510,7 @@ class LlaveService {
       quienEntrega: r.quien_entrega || '',
       documentoEntrega: r.numero_documento_entrega || '',
       nombreEntrega: r.nombre_entrega || '',
+      tipoEntrega: r.tipo_entrega || '',
       estado: r.estado,
     };
   }
