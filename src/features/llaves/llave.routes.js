@@ -6,6 +6,7 @@ const { requireAuth } = require('../auth/auth.middleware');
 const { validate } = require('../../shared/middlewares/validate.middleware');
 
 const router = Router();
+const ubicacionSchema = z.enum(['oficina_centro_servicios_docentes', 'porteria_superior']);
 
 const entregarSchema = z.object({
   nroidenti: z.string().min(1, 'Documento requerido'),
@@ -16,10 +17,12 @@ const entregarSchema = z.object({
   dia: z.string().optional().default(''),
   facultad: z.string().optional().default('No especificada'),
   motivo: z.string().optional().default(''),
+  ubicacion: ubicacionSchema.optional().default('oficina_centro_servicios_docentes'),
 });
 
 const procesarNFCSchema = z.object({
   id_carnet: z.string().min(1, 'id_carnet requerido'),
+  ubicacion: ubicacionSchema.optional().default('oficina_centro_servicios_docentes'),
 });
 
 const confirmarAnticipadoSchema = z.object({
@@ -29,6 +32,7 @@ const confirmarAnticipadoSchema = z.object({
   rol: z.enum(['docente', 'monitor']).optional().default('docente'),
   documento_persona: z.string().optional().default(''),
   nombre_persona: z.string().optional().default(''),
+  ubicacion: ubicacionSchema.optional().default('oficina_centro_servicios_docentes'),
 });
 
 router.get('/pendientes', ...requireAuth, (req, res) => llaveController.pendientes(req, res));

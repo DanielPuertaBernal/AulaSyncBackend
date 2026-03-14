@@ -5,9 +5,11 @@ const nfcController = require('./nfc.controller');
 const { validate } = require('../../shared/middlewares/validate.middleware');
 
 const router = Router();
+const ubicacionSchema = z.enum(['oficina_centro_servicios_docentes', 'porteria_superior']);
 
 const lecturaSchema = z.object({
   id_carnet: z.string().min(1, 'id_carnet es requerido'),
+  ubicacion: ubicacionSchema.optional().default('oficina_centro_servicios_docentes'),
 });
 
 // Endpoint para el ESP32 (autenticado por X-Device-Key)
