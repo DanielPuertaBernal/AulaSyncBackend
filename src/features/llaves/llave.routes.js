@@ -7,6 +7,7 @@ const { validate } = require('../../shared/middlewares/validate.middleware');
 
 const router = Router();
 const ubicacionSchema = z.enum(['oficina_centro_servicios_docentes', 'porteria_superior']);
+const origenSchema = z.enum(['individual', 'programacion']);
 
 const entregarSchema = z.object({
   nroidenti: z.string().min(1, 'Documento requerido'),
@@ -18,6 +19,7 @@ const entregarSchema = z.object({
   facultad: z.string().optional().default('No especificada'),
   motivo: z.string().optional().default(''),
   ubicacion: ubicacionSchema.optional().default('oficina_centro_servicios_docentes'),
+  origen: origenSchema.optional().default('individual'),
 });
 
 const procesarNFCSchema = z.object({
