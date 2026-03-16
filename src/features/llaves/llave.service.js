@@ -14,25 +14,58 @@ const {
   esReclamoAnticipado,
 } = require('../../shared/utils/date.helper');
 
-const LIMITE_HORAS_DEMORA = 5;
+const LIMITE_HORAS_DEMORA = 4;
+const UBICACION_OFICINA = 'oficina_centro_servicios_docentes';
+const UBICACION_PORTERIA_SUPERIOR = 'porteria_superior';
 
 class LlaveService {
   async obtenerPendientes() {
     const raw = await llaveRepository.findPendientes();
-    return raw.map(this._toClientFormat);
+    const individuales = await this._filtrarPrestamosIndividuales(raw);
+    return individuales.map((r) => this._toClientFormat(r));
   }
 
   async obtenerPendientesHoy() {
     const raw = await llaveRepository.findPendientesByFecha(getFechaHoy());
-    return raw.map(this._toClientFormat);
+    const individuales = await this._filtrarPrestamosIndividuales(raw);
+    return individuales.map((r) => this._toClientFormat(r));
   }
 
   async obtenerHistorial(filters = {}, pagination = null) {
-    const result = await llaveRepository.findHistorial(filters, pagination);
-    if (pagination) {
-      return { data: result.data.map(this._toClientFormat), meta: result.meta };
+    const repositoryFilters = { ...filters };
+    if (repositoryFilters.estado) {
+      delete repositoryFilters.estado;
     }
-    return result.data.map(this._toClientFormat);
+
+    const aplicarFiltroEstado = (items) => {
+      if (!filters.estado) return items;
+      return items.filter((item) => item.estado === filters.estado);
+    };
+
+    if (pagination && filters.estado) {
+      const fullResult = await llaveRepository.findHistorial(repositoryFilters, null);
+      const transformed = aplicarFiltroEstado(fullResult.data.map((r) => this._toClientFormat(r)));
+      const { page, limit } = pagination;
+      const start = (page - 1) * limit;
+      const data = transformed.slice(start, start + limit);
+      return {
+        data,
+        meta: {
+          page,
+          limit,
+          total: transformed.length,
+          totalPages: Math.ceil(transformed.length / limit),
+        },
+      };
+    }
+
+    const result = await llaveRepository.findHistorial(repositoryFilters, pagination);
+
+    if (pagination) {
+      return { data: result.data.map((r) => this._toClientFormat(r)), meta: result.meta };
+    }
+
+    return aplicarFiltroEstado(result.data.map((r) => this._toClientFormat(r)));
   }
 
   async obtenerClasesProcesadasHoy() {
@@ -46,7 +79,7 @@ class LlaveService {
   /**
    * Procesa una lectura NFC: identifica docente o monitor, determina préstamo/devolución
    */
-  async procesarLecturaNFC(idCarnet) {
+  async procesarLecturaNFC(idCarnet, ubicacion = UBICACION_OFICINA) {
     const persona = await docenteRepository.findByCarnet(idCarnet);
     if (!persona) {
       return { tipo: 'error', mensaje: 'Persona no encontrada para este carnet' };
@@ -63,8 +96,19 @@ class LlaveService {
         quien: ctx.rol,
         documento,
         nombre: persona.nombre,
+        ubicacion: this._normalizarUbicacionDevolucion(ubicacion),
       });
-      return { tipo: 'devolucion', ...result, docente: ctx.docente, persona, rol: ctx.rol };
+      return { tipo: 'devolucion', ...result, docente: ctx.docente, persona, rol: ctx.rol, ubicacion: this._normalizarUbicacionDevolucion(ubicacion) };
+    }
+
+    if (ubicacion !== UBICACION_OFICINA) {
+      return {
+        tipo: 'error',
+        mensaje: 'En la Portería Superior solo se permiten devoluciones de llaves',
+        docente: ctx.docente,
+        persona,
+        rol: ctx.rol,
+      };
     }
 
     if (!ctx.clasesDisponibles.length) {
@@ -105,7 +149,7 @@ class LlaveService {
       quien: ctx.rol,
       documento,
       nombre: persona.nombre,
-    }, 'carnet');
+    }, 'carnet', UBICACION_OFICINA);
     return {
       tipo: 'prestamo',
       docente: ctx.docente,
@@ -113,6 +157,7 @@ class LlaveService {
       rol: ctx.rol,
       clase: claseTarget,
       registro,
+      ubicacion: UBICACION_OFICINA,
       se_reclamo_a_tiempo: seReclamoATiempo,
       tiempo_retraso: tiempoRetraso,
     };
@@ -212,7 +257,8 @@ class LlaveService {
   /**
    * Confirma un préstamo anticipado tras aprobación del usuario
    */
-  async confirmarPrestamoAnticipado({ id_carnet, horario, aula, rol, documento_persona, nombre_persona }) {
+  async confirmarPrestamoAnticipado({ id_carnet, horario, aula, rol, documento_persona, nombre_persona, ubicacion = UBICACION_OFICINA }) {
+    this._normalizarUbicacionPrestamo(ubicacion);
     const persona = await docenteRepository.findByCarnet(id_carnet);
     if (!persona) throw Object.assign(new Error('Persona no encontrada'), { statusCode: 404 });
 
@@ -260,7 +306,7 @@ class LlaveService {
       quien: rol || 'docente',
       documento: documento_persona || docDocumento,
       nombre: nombre_persona || persona.nombre,
-    }, 'manual');
+    }, 'manual', UBICACION_OFICINA);
     return { ok: true, mensaje: `Llave entregada a ${(docente || persona).nombre}`, registro, docente: docente || persona };
   }
 
@@ -268,6 +314,8 @@ class LlaveService {
    * Entrega manual de llave (formulario) - Sin relación con programación
    */
   async registrarEntrega(infoClase) {
+    const ubicacionPrestamo = this._normalizarUbicacionPrestamo(infoClase.ubicacion);
+    const origenRegistro = this._normalizarOrigenRegistro(infoClase.origen);
     const campos = ['nroidenti', 'profesor', 'aula'];
     for (const c of campos) {
       if (!infoClase[c]) throw Object.assign(new Error(`Campo '${c}' requerido`), { statusCode: 400 });
@@ -300,6 +348,9 @@ class LlaveService {
       retraso_entrega: !seReclamoATiempo,
       tiempo_retraso_devolucion: '',
       tipo_entrega: 'manual',
+      origen_registro: origenRegistro,
+      ubicacion_prestamo: ubicacionPrestamo,
+      ubicacion_devolucion: '',
       quien_reclama: 'docente',
       numero_documento_reclama: documento,
       nombre_reclama: infoClase.profesor || '',
@@ -310,16 +361,19 @@ class LlaveService {
     };
 
     const created = await llaveRepository.create(registro);
-    return { ok: true, mensaje: `Llave entregada a ${infoClase.profesor}`, registro: created };
+    return { ok: true, mensaje: `Llave entregada a ${infoClase.profesor}`, registro: this._toClientFormat(created.toObject ? created.toObject() : created) };
   }
 
-  async registrarDevolucion(documento) {
+  async registrarDevolucion(documento, ubicacion = UBICACION_OFICINA) {
     const doc = String(documento).replace('.0', '');
     const registro = await llaveRepository.findPendienteByDocumento(doc);
     if (!registro) {
       throw Object.assign(new Error('No se encontró llave en préstamo para este docente'), { statusCode: 404 });
     }
-    const result = await this._ejecutarDevolucion(registro);
+    if (ubicacion && ubicacion !== UBICACION_OFICINA) {
+      throw Object.assign(new Error('La devolución manual solo se permite en la Oficina Centro de Servicios Docentes'), { statusCode: 400 });
+    }
+    const result = await this._ejecutarDevolucion(registro, { ubicacion: UBICACION_OFICINA });
     return { ok: true, ...result };
   }
 
@@ -356,7 +410,7 @@ class LlaveService {
     return mejorClase;
   }
 
-  async _ejecutarPrestamo(docente, clase, seReclamoATiempo, tiempoRetraso, reclamaInfo = {}, tipoEntrega = 'carnet') {
+  async _ejecutarPrestamo(docente, clase, seReclamoATiempo, tiempoRetraso, reclamaInfo = {}, tipoEntrega = 'carnet', ubicacionPrestamo = UBICACION_OFICINA) {
     const ahora = new Date();
     const registro = {
       numero_documento: String(docente.numero_documento).replace('.0', ''),
@@ -374,6 +428,9 @@ class LlaveService {
       retraso_entrega: false,
       tiempo_retraso_devolucion: '',
       tipo_entrega: tipoEntrega,
+      origen_registro: 'programacion',
+      ubicacion_prestamo: this._normalizarUbicacionPrestamo(ubicacionPrestamo),
+      ubicacion_devolucion: '',
       quien_reclama: reclamaInfo.quien || 'docente',
       numero_documento_reclama: reclamaInfo.documento || String(docente.numero_documento).replace('.0', ''),
       nombre_reclama: reclamaInfo.nombre || docente.nombre || '',
@@ -382,7 +439,8 @@ class LlaveService {
       nombre_entrega: '',
       estado: 'en_prestamo',
     };
-    return llaveRepository.create(registro);
+    const created = await llaveRepository.create(registro);
+    return this._toClientFormat(created.toObject ? created.toObject() : created);
   }
 
   async _ejecutarDevolucion(registro, entregaInfo = {}) {
@@ -393,24 +451,20 @@ class LlaveService {
       : getFechaHoy();
     const retrasoDevolucion = calcularRetrasoDevolucion(registro.horario, fechaStr, ahora);
 
-    const horasTranscurridas = registro.fecha_hora_entrega
-      ? (ahora - registro.fecha_hora_entrega) / (1000 * 60 * 60)
-      : 0;
-    const esDemora = horasTranscurridas > LIMITE_HORAS_DEMORA;
-
     const updates = {
       fecha_hora_devolucion: ahora,
       duracion,
       tiempo_retraso_devolucion: retrasoDevolucion,
       retraso_entrega: !!retrasoDevolucion,
-      estado: esDemora ? 'demora_entrega' : 'entregado',
+      estado: 'entregado',
+      ubicacion_devolucion: this._normalizarUbicacionDevolucion(entregaInfo.ubicacion),
       quien_entrega: entregaInfo.quien || 'docente',
       numero_documento_entrega: entregaInfo.documento || registro.numero_documento,
       nombre_entrega: entregaInfo.nombre || registro.docente,
     };
 
     const updated = await llaveRepository.update(registro._id, updates);
-    return { mensaje: `Llave devuelta por ${entregaInfo.nombre || registro.docente}`, registro: updated };
+    return { mensaje: `Llave devuelta por ${entregaInfo.nombre || registro.docente}`, registro: this._toClientFormat(updated) };
   }
 
   _horarioCubiertoPorPrestamo(horarioClase, horariosProcessados) {
@@ -485,6 +539,7 @@ class LlaveService {
   _toClientFormat(r) {
     const formatDate = (d) => (d instanceof Date ? d.toISOString().split('T')[0] : '');
     const formatTime = (d) => (d instanceof Date ? d.toTimeString().split(' ')[0] : '');
+    const estadoCalculado = this._calcularEstadoVisual(r);
 
     return {
       _id: r._id,
@@ -504,6 +559,8 @@ class LlaveService {
       tiempoRetraso: r.tiempo_retraso,
       retrasoEntrega: r.retraso_entrega,
       tiempoRetrasoDevolucion: r.tiempo_retraso_devolucion,
+      ubicacionPrestamo: r.ubicacion_prestamo || '',
+      ubicacionDevolucion: r.ubicacion_devolucion || '',
       quienReclama: r.quien_reclama || '',
       documentoReclama: r.numero_documento_reclama || '',
       nombreReclama: r.nombre_reclama || '',
@@ -511,8 +568,105 @@ class LlaveService {
       documentoEntrega: r.numero_documento_entrega || '',
       nombreEntrega: r.nombre_entrega || '',
       tipoEntrega: r.tipo_entrega || '',
-      estado: r.estado,
+      origenRegistro: r.origen_registro || '',
+      estado: estadoCalculado,
     };
+  }
+
+  _esPrestamoIndividual(registro) {
+    return registro?.origen_registro === 'individual';
+  }
+
+  async _filtrarPrestamosIndividuales(registros = []) {
+    const cacheProgramacionPorDia = new Map();
+    const resultado = [];
+
+    for (const registro of registros) {
+      if (!this._esPrestamoIndividual(registro)) continue;
+
+      const esProgramacion = await this._coincideConProgramacion(registro, cacheProgramacionPorDia);
+      if (esProgramacion) {
+        // Autocorrección de datos históricos mal clasificados
+        try {
+          await llaveRepository.update(registro._id, { origen_registro: 'programacion' });
+        } catch (_) {
+          // Si falla la corrección persistente, igual no mostramos el registro como individual
+        }
+        continue;
+      }
+
+      resultado.push(registro);
+    }
+
+    return resultado;
+  }
+
+  async _coincideConProgramacion(registro, cacheProgramacionPorDia) {
+    const dia = String(registro?.dia || '').trim();
+    const horario = String(registro?.horario || '').trim().toUpperCase();
+    const aula = String(registro?.aula || '').trim().toUpperCase();
+    const documento = String(registro?.numero_documento || '').replace('.0', '').trim();
+
+    if (!dia || !horario || !aula || !documento) return false;
+
+    if (!cacheProgramacionPorDia.has(dia)) {
+      const clasesDia = await programacionRepository.findByDia(dia);
+      cacheProgramacionPorDia.set(dia, clasesDia || []);
+    }
+
+    const clases = cacheProgramacionPorDia.get(dia) || [];
+    return clases.some((c) => (
+      String(c.numero_documento || '').replace('.0', '').trim() === documento
+      && String(c.horario || '').trim().toUpperCase() === horario
+      && String(c.aula || '').trim().toUpperCase() === aula
+    ));
+  }
+
+  _normalizarOrigenRegistro(origen = 'individual') {
+    if (!['individual', 'programacion'].includes(origen)) {
+      throw Object.assign(new Error('Origen de préstamo no válido'), { statusCode: 400 });
+    }
+    return origen;
+  }
+
+  _calcularEstadoVisual(r) {
+    if (r.fecha_hora_devolucion) {
+      return 'entregado';
+    }
+
+    const estadoActual = r.estado || '';
+    if (estadoActual !== 'en_prestamo') return estadoActual;
+
+    const fechaEntrega = r.fecha_hora_entrega instanceof Date
+      ? r.fecha_hora_entrega
+      : (r.fecha_hora_entrega ? new Date(r.fecha_hora_entrega) : null);
+    if (!fechaEntrega || Number.isNaN(fechaEntrega.getTime())) return estadoActual;
+
+    const horario = String(r.horario || '').toUpperCase().split(' A ');
+    if (horario.length < 2) return estadoActual;
+
+    const finMinutos = horaAMinutos(String(horario[1] || '').trim());
+    if (finMinutos === null) return estadoActual;
+
+    const finClase = new Date(fechaEntrega);
+    finClase.setHours(Math.floor(finMinutos / 60), finMinutos % 60, 0, 0);
+
+    const umbralDemora = new Date(finClase.getTime() + (LIMITE_HORAS_DEMORA * 60 * 60 * 1000));
+    return new Date() > umbralDemora ? 'demora_entrega' : estadoActual;
+  }
+
+  _normalizarUbicacionPrestamo(ubicacion = UBICACION_OFICINA) {
+    if (ubicacion !== UBICACION_OFICINA) {
+      throw Object.assign(new Error('Los préstamos y entregas solo se registran en la Oficina Centro de Servicios Docentes'), { statusCode: 400 });
+    }
+    return UBICACION_OFICINA;
+  }
+
+  _normalizarUbicacionDevolucion(ubicacion = UBICACION_OFICINA) {
+    if (![UBICACION_OFICINA, UBICACION_PORTERIA_SUPERIOR].includes(ubicacion)) {
+      throw Object.assign(new Error('Ubicación de devolución no válida'), { statusCode: 400 });
+    }
+    return ubicacion;
   }
 }
 

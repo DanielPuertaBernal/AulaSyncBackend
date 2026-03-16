@@ -30,8 +30,8 @@ class LlaveController {
   }
 
   async procesarNFC(req, res) {
-    const { id_carnet } = req.body;
-    const result = await llaveService.procesarLecturaNFC(id_carnet);
+    const { id_carnet, ubicacion } = req.body;
+    const result = await llaveService.procesarLecturaNFC(id_carnet, ubicacion);
     return res.json({ ok: true, data: result });
   }
 
@@ -50,7 +50,7 @@ class LlaveController {
   }
 
   async devolver(req, res) {
-    const result = await llaveService.registrarDevolucion(req.params.documento);
+    const result = await llaveService.registrarDevolucion(req.params.documento, req.body?.ubicacion);
     return res.json({ ok: true, message: result.mensaje, data: { registro: result.registro } });
   }
 

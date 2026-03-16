@@ -27,6 +27,7 @@ const prestamoSchema = new mongoose.Schema(
     docente_codigo_nfc: { type: String, required: true, index: true },
     docente_nombre: { type: String, default: '' },
     auxiliar_prestamista: { type: String, default: 'Auxiliar' },
+    ubicacion_prestamo: { type: String, enum: ['oficina_centro_servicios_docentes'], default: 'oficina_centro_servicios_docentes' },
     equipos: [detalleEquipoSchema],
     estado: {
       type: String,
@@ -58,6 +59,7 @@ const devolucionSchema = new mongoose.Schema(
     prestamo_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Prestamo', required: true, index: true },
     docente_codigo_nfc: { type: String, default: '' },
     docente_nombre: { type: String, default: '' },
+    ubicacion_devolucion: { type: String, enum: ['oficina_centro_servicios_docentes'], default: 'oficina_centro_servicios_docentes' },
     equipos_devueltos: [equipoDevueltoSchema],
     auxiliar_que_recibio: { type: String, default: 'Auxiliar' },
     fecha_devolucion: { type: Date, default: Date.now },

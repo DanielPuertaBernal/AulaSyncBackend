@@ -147,10 +147,11 @@ class NFCGateway extends EventEmitter {
     this.emit('resultado', data);
   }
 
-  emitirCarnetLeido(idCarnet) {
+  emitirCarnetLeido(idCarnet, ubicacion = 'oficina_centro_servicios_docentes') {
     if (this._io) {
       this._io.of('/nfc').emit('nfc:carnet_leido', {
         id_carnet: idCarnet,
+        ubicacion,
         timestamp: new Date().toISOString(),
       });
     }

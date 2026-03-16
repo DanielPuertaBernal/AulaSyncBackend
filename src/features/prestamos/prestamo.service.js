@@ -8,6 +8,8 @@ const mongoose = require('mongoose');
 const { prestamoRepository, devolucionRepository } = require('./prestamo.repository');
 const equipoRepository = require('../equipos/equipo.repository');
 
+const UBICACION_OFICINA = 'oficina_centro_servicios_docentes';
+
 class PrestamoService {
   async listar() { return prestamoRepository.findAll(); }
   async activos() { return prestamoRepository.findActivos(); }
@@ -24,10 +26,12 @@ class PrestamoService {
    * Equivale a PréstamoService.crear_prestamo (Python)
    * @param {object} datos
    */
-  async crear({ docente_codigo_nfc, docente_nombre, equipos, auxiliar_prestamista }) {
+  async crear({ docente_codigo_nfc, docente_nombre, equipos, auxiliar_prestamista, ubicacion_prestamo = UBICACION_OFICINA }) {
     if (!equipos || !equipos.length) {
       throw Object.assign(new Error('Debe prestar al menos un equipo'), { statusCode: 400 });
     }
+
+    this._validarUbicacionOficina(ubicacion_prestamo, 'Los préstamos de equipos solo se registran en la Oficina Centro de Servicios Docentes');
 
     const equiposIds = this._normalizarEquipos(equipos);
 
@@ -63,6 +67,7 @@ class PrestamoService {
           {
             docente_nombre: docente_nombre || prestamoAbierto.docente_nombre,
             auxiliar_prestamista: auxiliar_prestamista || prestamoAbierto.auxiliar_prestamista || 'Auxiliar',
+            ubicacion_prestamo: UBICACION_OFICINA,
             equipos: [...(prestamoAbierto.equipos || []), ...detalles],
           },
           session
@@ -72,6 +77,7 @@ class PrestamoService {
           docente_codigo_nfc,
           docente_nombre,
           auxiliar_prestamista: auxiliar_prestamista || 'Auxiliar',
+          ubicacion_prestamo: UBICACION_OFICINA,
           equipos: detalles,
           estado: 'activo',
         }, session);
@@ -125,11 +131,14 @@ class PrestamoService {
     docente_nombre,
     equipos,
     auxiliar_que_recibio,
+    ubicacion_devolucion = UBICACION_OFICINA,
   }) {
     const prestamo = await this.obtener(prestamo_id);
     if (prestamo.estado === 'completamente_devuelto') {
       throw Object.assign(new Error('El préstamo ya fue devuelto completamente'), { statusCode: 400 });
     }
+
+    this._validarUbicacionOficina(ubicacion_devolucion, 'Las devoluciones de equipos solo se registran en la Oficina Centro de Servicios Docentes');
 
     const equiposADevolver = equipos && equipos.length
       ? this._normalizarEquipos(equipos)
@@ -176,6 +185,7 @@ class PrestamoService {
         prestamo_id: new mongoose.Types.ObjectId(prestamo_id),
         docente_codigo_nfc,
         docente_nombre,
+        ubicacion_devolucion: UBICACION_OFICINA,
         equipos_devueltos: equiposDevueltos,
         auxiliar_que_recibio: auxiliar_que_recibio || 'Auxiliar',
         es_devolucion_completa: esCompleta,
@@ -212,6 +222,12 @@ class PrestamoService {
           { statusCode: 409 }
         );
       }
+    }
+  }
+
+  _validarUbicacionOficina(ubicacion, mensaje) {
+    if (ubicacion !== UBICACION_OFICINA) {
+      throw Object.assign(new Error(mensaje), { statusCode: 400 });
     }
   }
 }
