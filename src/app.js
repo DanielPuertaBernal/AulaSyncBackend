@@ -17,6 +17,8 @@ const equipoRoutes = require('./features/equipos/equipo.routes');
 const prestamoRoutes = require('./features/prestamos/prestamo.routes');
 const nfcRoutes = require('./features/nfc/nfc.routes');
 const monitorRoutes = require('./features/monitores/monitor.routes');
+const salonRoutes = require('./features/salones/salon.routes');
+const bloqueRoutes = require('./features/bloques/bloque.routes');
 
 const app = express();
 
@@ -42,6 +44,8 @@ app.use('/api/equipos', equipoRoutes);
 app.use('/api/prestamos', prestamoRoutes);
 app.use('/api/nfc', nfcRoutes);
 app.use('/api/monitores', monitorRoutes);
+app.use('/api/salones', salonRoutes);
+app.use('/api/bloques', bloqueRoutes);
 
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
