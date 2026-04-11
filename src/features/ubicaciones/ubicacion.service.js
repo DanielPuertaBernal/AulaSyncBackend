@@ -1,5 +1,7 @@
 'use strict';
 const ubicacionRepository = require('./ubicacion.repository');
+const ApiError = require('../../shared/errors/api.error');
+const { normalizeKey, normalizeString } = require('../../shared/utils/normalize.helper');
 const {
   UBICACIONES,
   OPERACIONES_UBICACION,
@@ -40,8 +42,20 @@ const OPERACION_A_CAMPO = Object.freeze({
 });
 
 class UbicacionService {
+  constructor() {
+    this._defaultsReadyPromise = null;
+  }
+
   async asegurarIniciales() {
-    await ubicacionRepository.upsertDefaults(DEFAULT_UBICACIONES);
+    if (!this._defaultsReadyPromise) {
+      this._defaultsReadyPromise = ubicacionRepository.upsertDefaults(DEFAULT_UBICACIONES)
+        .catch((error) => {
+          this._defaultsReadyPromise = null;
+          throw error;
+        });
+    }
+
+    await this._defaultsReadyPromise;
   }
 
   async listar({ incluirInactivas = false } = {}) {
@@ -54,10 +68,10 @@ class UbicacionService {
     const normalizada = this._normalizarClave(clave);
     const ubicacion = await ubicacionRepository.findByClave(normalizada);
     if (!ubicacion) {
-      throw Object.assign(new Error(`La ubicación '${normalizada}' no está registrada`), { statusCode: 404 });
+      throw ApiError.notFound(`La ubicación '${normalizada}' no está registrada`);
     }
     if (!permitirInactiva && !ubicacion.activa) {
-      throw Object.assign(new Error(`La ubicación '${ubicacion.nombre}' está inactiva`), { statusCode: 400 });
+      throw ApiError.badRequest(`La ubicación '${ubicacion.nombre}' está inactiva`);
     }
     return ubicacion;
   }
@@ -67,7 +81,7 @@ class UbicacionService {
     const payload = this._normalizarPayload(data);
     const existing = await ubicacionRepository.findByClave(payload.clave);
     if (existing) {
-      throw Object.assign(new Error(`Ya existe una ubicación con la clave '${payload.clave}'`), { statusCode: 409 });
+      throw ApiError.conflict(`Ya existe una ubicación con la clave '${payload.clave}'`);
     }
 
     return ubicacionRepository.create({
@@ -80,13 +94,13 @@ class UbicacionService {
   async actualizar(id, updates, actor = '') {
     await this.asegurarIniciales();
     const current = await ubicacionRepository.findById(id);
-    if (!current) throw Object.assign(new Error('Ubicación no encontrada'), { statusCode: 404 });
+    if (!current) throw ApiError.notFound('Ubicación no encontrada');
 
     const payload = this._normalizarPayload(updates, true);
     if (payload.clave && payload.clave !== current.clave) {
       const existing = await ubicacionRepository.findByClave(payload.clave);
       if (existing && String(existing._id) !== String(id)) {
-        throw Object.assign(new Error(`Ya existe una ubicación con la clave '${payload.clave}'`), { statusCode: 409 });
+        throw ApiError.conflict(`Ya existe una ubicación con la clave '${payload.clave}'`);
       }
     }
 
@@ -94,14 +108,14 @@ class UbicacionService {
       ...payload,
       actualizado_por: actor || current.actualizado_por || '',
     });
-    if (!updated) throw Object.assign(new Error('Ubicación no encontrada'), { statusCode: 404 });
+    if (!updated) throw ApiError.notFound('Ubicación no encontrada');
     return updated;
   }
 
   async eliminar(id) {
     await this.asegurarIniciales();
     const deleted = await ubicacionRepository.deleteById(id);
-    if (!deleted) throw Object.assign(new Error('Ubicación no encontrada'), { statusCode: 404 });
+    if (!deleted) throw ApiError.notFound('Ubicación no encontrada');
     return { ok: true };
   }
 
@@ -109,10 +123,10 @@ class UbicacionService {
     const ubicacion = await this.obtenerPorClave(clave);
     const campoPermiso = OPERACION_A_CAMPO[operacion];
     if (!campoPermiso) {
-      throw Object.assign(new Error('Operación de ubicación no soportada'), { statusCode: 500 });
+      throw new ApiError('Operación de ubicación no soportada', 500);
     }
     if (!ubicacion[campoPermiso]) {
-      throw Object.assign(new Error(`La ubicación '${ubicacion.nombre}' no permite la operación solicitada`), { statusCode: 400 });
+      throw ApiError.badRequest(`La ubicación '${ubicacion.nombre}' no permite la operación solicitada`);
     }
     return ubicacion.clave;
   }
@@ -121,8 +135,8 @@ class UbicacionService {
     const payload = { ...data };
 
     if (payload.clave !== undefined) payload.clave = this._normalizarClave(payload.clave);
-    if (payload.nombre !== undefined) payload.nombre = String(payload.nombre || '').trim();
-    if (payload.descripcion !== undefined) payload.descripcion = String(payload.descripcion || '').trim();
+    if (payload.nombre !== undefined) payload.nombre = normalizeString(payload.nombre);
+    if (payload.descripcion !== undefined) payload.descripcion = normalizeString(payload.descripcion);
 
     for (const campo of [
       'activa',
@@ -139,7 +153,7 @@ class UbicacionService {
     if (!parcial) {
       for (const campo of ['clave', 'nombre']) {
         if (!payload[campo]) {
-          throw Object.assign(new Error(`Campo '${campo}' requerido`), { statusCode: 400 });
+          throw ApiError.badRequest(`Campo '${campo}' requerido`);
         }
       }
     }
@@ -148,14 +162,10 @@ class UbicacionService {
   }
 
   _normalizarClave(clave) {
-    const normalizada = String(clave || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '');
+    const normalizada = normalizeKey(clave);
 
     if (!normalizada) {
-      throw Object.assign(new Error('Clave de ubicación requerida'), { statusCode: 400 });
+      throw ApiError.badRequest('Clave de ubicación requerida');
     }
 
     return normalizada;

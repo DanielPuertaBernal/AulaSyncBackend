@@ -2,6 +2,7 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const ApiError = require('../../shared/errors/api.error');
 const authRepository = require('./auth.repository');
 const usuarioRepository = require('../usuarios/usuario.repository');
 
@@ -56,19 +57,19 @@ class AuthService {
   async refresh(refreshToken, context = {}) {
     const payload = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, this._getJwtVerifyOptions());
     if (payload.type !== 'refresh') {
-      throw Object.assign(new Error('Tipo de token inválido para refresh'), { statusCode: 401 });
+      throw ApiError.unauthorized('Tipo de token inválido para refresh');
     }
 
     const user = await usuarioRepository.findById(payload.sub);
     if (!user || !user.activo) {
-      throw Object.assign(new Error('Usuario no válido'), { statusCode: 401 });
+      throw ApiError.unauthorized('Usuario no válido');
     }
 
     const tokenHash = this._hashToken(refreshToken);
     const session = await authRepository.findActiveRefreshSession(payload.sub, tokenHash);
     if (!session) {
       await authRepository.revokeAllRefreshSessions(payload.sub);
-      throw Object.assign(new Error('Refresh token inválido o revocado'), { statusCode: 401 });
+      throw ApiError.unauthorized('Refresh token inválido o revocado');
     }
 
     await authRepository.revokeRefreshSession(payload.sub, tokenHash);
@@ -82,7 +83,7 @@ class AuthService {
 
   async logout(userId, refreshToken = '') {
     if (!userId) {
-      throw Object.assign(new Error('Usuario no autenticado'), { statusCode: 401 });
+      throw ApiError.unauthorized('Usuario no autenticado');
     }
 
     if (refreshToken) {
@@ -102,7 +103,7 @@ class AuthService {
    */
   async hashPassword(password) {
     if (!password || password.length < 6) {
-      throw Object.assign(new Error('Contraseña debe tener al menos 6 caracteres'), { statusCode: 400 });
+      throw ApiError.badRequest('Contraseña debe tener al menos 6 caracteres');
     }
     return bcrypt.hash(password, SALT_ROUNDS);
   }

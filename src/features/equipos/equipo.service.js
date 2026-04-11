@@ -5,18 +5,20 @@
  * Código de barras: INV-{codigo}-{consecutivo:03d}
  */
 const equipoRepository = require('./equipo.repository');
+const ApiError = require('../../shared/errors/api.error');
+const { normalizeString } = require('../../shared/utils/normalize.helper');
 
 class EquipoService {
   async listar() { return equipoRepository.findAll(); }
   async disponibles() { return equipoRepository.findDisponibles(); }
   async obtener(id) {
     const e = await equipoRepository.findById(id);
-    if (!e) throw Object.assign(new Error('Equipo no encontrado'), { statusCode: 404 });
+    if (!e) throw ApiError.notFound('Equipo no encontrado');
     return e;
   }
   async buscarPorCodigoBarras(cb) {
     const e = await equipoRepository.findByCodigoBarras(cb);
-    if (!e) throw Object.assign(new Error('Equipo no encontrado'), { statusCode: 404 });
+    if (!e) throw ApiError.notFound('Equipo no encontrado');
     return e;
   }
 
@@ -27,28 +29,25 @@ class EquipoService {
   async registrar({ nombre, marca, consecutivo, codigo_inventario, descripcion }) {
     const existing = await equipoRepository.findByCodigo(codigo_inventario);
     if (existing) {
-      throw Object.assign(
-        new Error(`Ya existe un equipo con código '${codigo_inventario}'`),
-        { statusCode: 409 }
-      );
+      throw ApiError.conflict(`Ya existe un equipo con código '${codigo_inventario}'`);
     }
     const cons = parseInt(consecutivo, 10);
     const codigoBase = String(codigo_inventario).split('-')[0] || codigo_inventario;
     const codigo_barras = `INV-${codigoBase}-${String(cons).padStart(3, '0')}`;
 
     return equipoRepository.create({
-      nombre: nombre.trim(),
-      marca: (marca || '').trim(),
+      nombre: normalizeString(nombre),
+      marca: normalizeString(marca),
       consecutivo: cons,
-      codigo_inventario: codigo_inventario.trim(),
+      codigo_inventario: normalizeString(codigo_inventario),
       codigo_barras,
-      descripcion: descripcion || '',
+      descripcion: normalizeString(descripcion),
     });
   }
 
   async actualizar(id, datos) {
     const actual = await equipoRepository.findById(id);
-    if (!actual) throw Object.assign(new Error('Equipo no encontrado'), { statusCode: 404 });
+    if (!actual) throw ApiError.notFound('Equipo no encontrado');
 
     const updates = { ...datos };
 
@@ -57,10 +56,7 @@ class EquipoService {
       if (updates.codigo_inventario !== actual.codigo_inventario) {
         const existing = await equipoRepository.findByCodigo(updates.codigo_inventario);
         if (existing && String(existing._id) !== String(id)) {
-          throw Object.assign(
-            new Error(`Ya existe un equipo con código '${updates.codigo_inventario}'`),
-            { statusCode: 409 }
-          );
+          throw ApiError.conflict(`Ya existe un equipo con código '${updates.codigo_inventario}'`);
         }
       }
     }
@@ -68,7 +64,7 @@ class EquipoService {
     if (updates.consecutivo !== undefined) {
       updates.consecutivo = parseInt(updates.consecutivo, 10);
       if (Number.isNaN(updates.consecutivo)) {
-        throw Object.assign(new Error('Consecutivo inválido'), { statusCode: 400 });
+        throw ApiError.badRequest('Consecutivo inválido');
       }
     }
 
@@ -80,13 +76,13 @@ class EquipoService {
     }
 
     const updated = await equipoRepository.update(id, updates);
-    if (!updated) throw Object.assign(new Error('Equipo no encontrado'), { statusCode: 404 });
+    if (!updated) throw ApiError.notFound('Equipo no encontrado');
     return updated;
   }
 
   async eliminar(id) {
     const deleted = await equipoRepository.deleteById(id);
-    if (!deleted) throw Object.assign(new Error('Equipo no encontrado'), { statusCode: 404 });
+    if (!deleted) throw ApiError.notFound('Equipo no encontrado');
     return { ok: true };
   }
 

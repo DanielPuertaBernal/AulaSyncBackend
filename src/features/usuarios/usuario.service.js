@@ -6,6 +6,7 @@
 const usuarioRepository = require('./usuario.repository');
 const authRepository = require('../auth/auth.repository');
 const authService = require('../auth/auth.service');
+const ApiError = require('../../shared/errors/api.error');
 const { ROLES } = require('./usuario.schema');
 
 class UsuarioService {
@@ -34,10 +35,10 @@ class UsuarioService {
     // Verificar duplicados
     const { usuarioExiste, emailExiste } = await usuarioRepository.checkDuplicates(usuario, email);
     if (usuarioExiste) {
-      throw Object.assign(new Error(`El usuario '${usuario}' ya existe`), { statusCode: 409 });
+      throw ApiError.conflict(`El usuario '${usuario}' ya existe`);
     }
     if (emailExiste) {
-      throw Object.assign(new Error(`El email '${email}' ya está registrado`), { statusCode: 409 });
+      throw ApiError.conflict(`El email '${email}' ya está registrado`);
     }
 
     const hashPassword = await authService.hashPassword(password);
@@ -62,11 +63,11 @@ class UsuarioService {
    */
   async cambiarEstado(username, activo, usuarioActual) {
     if (username === usuarioActual) {
-      throw Object.assign(new Error('No puedes desactivarte a ti mismo'), { statusCode: 400 });
+      throw ApiError.badRequest('No puedes desactivarte a ti mismo');
     }
     const updated = await usuarioRepository.setActivo(username, activo);
     if (!updated) {
-      throw Object.assign(new Error(`Usuario '${username}' no encontrado`), { statusCode: 404 });
+      throw ApiError.notFound(`Usuario '${username}' no encontrado`);
     }
     if (!activo) {
       await authRepository.revokeAllRefreshSessions(updated._id);
@@ -87,7 +88,7 @@ class UsuarioService {
       // Verificar que el email no esté en uso por otro usuario
       const existing = await usuarioRepository.findByEmail(email);
       if (existing && existing.usuario !== username) {
-        throw Object.assign(new Error('El email ya está en uso'), { statusCode: 409 });
+        throw ApiError.conflict('El email ya está en uso');
       }
       updates.email = email.toLowerCase().trim();
     }
@@ -95,7 +96,7 @@ class UsuarioService {
 
     const updated = await usuarioRepository.updateByUsername(username, updates);
     if (!updated) {
-      throw Object.assign(new Error('Usuario no encontrado'), { statusCode: 404 });
+      throw ApiError.notFound('Usuario no encontrado');
     }
     return updated;
   }
@@ -110,12 +111,12 @@ class UsuarioService {
   async cambiarContrasena(username, passwordActual, passwordNueva) {
     const user = await authRepository.findByUsername(username);
     if (!user) {
-      throw Object.assign(new Error('Usuario no encontrado'), { statusCode: 404 });
+      throw ApiError.notFound('Usuario no encontrado');
     }
 
     const match = await authService.verifyPassword(passwordActual, user.hash_password);
     if (!match) {
-      throw Object.assign(new Error('Contraseña actual incorrecta'), { statusCode: 401 });
+      throw ApiError.unauthorized('Contraseña actual incorrecta');
     }
 
     const newHash = await authService.hashPassword(passwordNueva);
@@ -132,7 +133,7 @@ class UsuarioService {
   async obtenerUsuario(username) {
     const user = await usuarioRepository.findByUsername(username);
     if (!user) {
-      throw Object.assign(new Error(`Usuario '${username}' no encontrado`), { statusCode: 404 });
+      throw ApiError.notFound(`Usuario '${username}' no encontrado`);
     }
     return user;
   }

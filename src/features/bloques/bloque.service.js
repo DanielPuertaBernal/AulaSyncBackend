@@ -1,5 +1,7 @@
 'use strict';
 const bloqueRepository = require('./bloque.repository');
+const ApiError = require('../../shared/errors/api.error');
+const { normalizeUpperString } = require('../../shared/utils/normalize.helper');
 
 class BloqueService {
   async listar() {
@@ -10,36 +12,36 @@ class BloqueService {
     const nombre = this._normalizarNombre(nombre_bloque);
     const existing = await bloqueRepository.findByNombre(nombre);
     if (existing) {
-      throw Object.assign(new Error(`Ya existe el bloque '${nombre}'`), { statusCode: 409 });
+      throw ApiError.conflict(`Ya existe el bloque '${nombre}'`);
     }
     return bloqueRepository.create({ nombre_bloque: nombre });
   }
 
   async actualizar(id, { nombre_bloque }) {
     const current = await bloqueRepository.findById(id);
-    if (!current) throw Object.assign(new Error('Bloque no encontrado'), { statusCode: 404 });
+    if (!current) throw ApiError.notFound('Bloque no encontrado');
 
     const nombre = this._normalizarNombre(nombre_bloque);
     const existing = await bloqueRepository.findByNombre(nombre);
     if (existing && String(existing._id) !== String(id)) {
-      throw Object.assign(new Error(`Ya existe el bloque '${nombre}'`), { statusCode: 409 });
+      throw ApiError.conflict(`Ya existe el bloque '${nombre}'`);
     }
 
     const updated = await bloqueRepository.update(id, { nombre_bloque: nombre });
-    if (!updated) throw Object.assign(new Error('Bloque no encontrado'), { statusCode: 404 });
+    if (!updated) throw ApiError.notFound('Bloque no encontrado');
     return updated;
   }
 
   async eliminar(id) {
     const deleted = await bloqueRepository.deleteById(id);
-    if (!deleted) throw Object.assign(new Error('Bloque no encontrado'), { statusCode: 404 });
+    if (!deleted) throw ApiError.notFound('Bloque no encontrado');
     return { ok: true };
   }
 
   _normalizarNombre(nombreBloque) {
-    const nombre = String(nombreBloque || '').trim().toUpperCase();
+    const nombre = normalizeUpperString(nombreBloque);
     if (!nombre) {
-      throw Object.assign(new Error("Campo 'nombre_bloque' requerido"), { statusCode: 400 });
+      throw ApiError.badRequest("Campo 'nombre_bloque' requerido");
     }
     return nombre;
   }

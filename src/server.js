@@ -9,6 +9,7 @@ const { Server } = require('socket.io');
 const app = require('./app');
 const mongoClient = require('./shared/db/mongo.client');
 const nfcGateway = require('./shared/websocket/nfc.gateway');
+const ubicacionService = require('./features/ubicaciones/ubicacion.service');
 
 const PORT = process.env.PORT || 3001;
 const CLIENT_ORIGIN = process.env.CLIENT_URL || 'http://localhost:5173';
@@ -27,6 +28,7 @@ async function bootstrap() {
 
   // 1. Conectar MongoDB
   await mongoClient.connect();
+  await ubicacionService.asegurarIniciales();
 
   // 2. Crear servidor HTTP + Socket.io
   const httpServer = http.createServer(app);

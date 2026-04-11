@@ -1,6 +1,12 @@
 'use strict';
 const salonRepository = require('./salon.repository');
 const bloqueRepository = require('../bloques/bloque.repository');
+const ApiError = require('../../shared/errors/api.error');
+const {
+  normalizeAula,
+  normalizeString,
+  normalizeUpperString,
+} = require('../../shared/utils/normalize.helper');
 
 class SalonService {
   async listar() {
@@ -17,7 +23,7 @@ class SalonService {
 
     const existing = await salonRepository.findByNombre(payload.nombre_salon);
     if (existing) {
-      throw Object.assign(new Error(`Ya existe el salón '${payload.nombre_salon}'`), { statusCode: 409 });
+      throw ApiError.conflict(`Ya existe el salón '${payload.nombre_salon}'`);
     }
 
     await this._validarBloqueRegistrado(payload.nombre_bloque);
@@ -27,14 +33,14 @@ class SalonService {
 
   async actualizar(id, updates) {
     const current = await salonRepository.findById(id);
-    if (!current) throw Object.assign(new Error('Salón no encontrado'), { statusCode: 404 });
+    if (!current) throw ApiError.notFound('Salón no encontrado');
 
     const payload = this._normalizarPayload(updates, true);
 
     if (payload.nombre_salon && payload.nombre_salon !== current.nombre_salon) {
       const existing = await salonRepository.findByNombre(payload.nombre_salon);
       if (existing && String(existing._id) !== String(id)) {
-        throw Object.assign(new Error(`Ya existe el salón '${payload.nombre_salon}'`), { statusCode: 409 });
+        throw ApiError.conflict(`Ya existe el salón '${payload.nombre_salon}'`);
       }
     }
 
@@ -43,13 +49,13 @@ class SalonService {
     }
 
     const updated = await salonRepository.update(id, payload);
-    if (!updated) throw Object.assign(new Error('Salón no encontrado'), { statusCode: 404 });
+    if (!updated) throw ApiError.notFound('Salón no encontrado');
     return updated;
   }
 
   async eliminar(id) {
     const deleted = await salonRepository.deleteById(id);
-    if (!deleted) throw Object.assign(new Error('Salón no encontrado'), { statusCode: 404 });
+    if (!deleted) throw ApiError.notFound('Salón no encontrado');
     return { ok: true };
   }
 
@@ -57,18 +63,18 @@ class SalonService {
     const payload = { ...data };
 
     if (payload.nombre_salon !== undefined) {
-      payload.nombre_salon = String(payload.nombre_salon || '').trim().toUpperCase();
+      payload.nombre_salon = normalizeAula(payload.nombre_salon);
     }
     if (payload.nombre_bloque !== undefined) {
-      payload.nombre_bloque = String(payload.nombre_bloque || '').trim().toUpperCase();
+      payload.nombre_bloque = normalizeUpperString(payload.nombre_bloque);
     }
     if (payload.tipo_silleteria !== undefined) {
-      payload.tipo_silleteria = String(payload.tipo_silleteria || '').trim();
+      payload.tipo_silleteria = normalizeString(payload.tipo_silleteria);
     }
     if (payload.capacidad_estudiantes !== undefined) {
       payload.capacidad_estudiantes = parseInt(payload.capacidad_estudiantes, 10);
       if (Number.isNaN(payload.capacidad_estudiantes) || payload.capacidad_estudiantes < 1) {
-        throw Object.assign(new Error('Capacidad de estudiantes inválida'), { statusCode: 400 });
+        throw ApiError.badRequest('Capacidad de estudiantes inválida');
       }
     }
 
@@ -80,7 +86,7 @@ class SalonService {
           payload[campo] === null ||
           (typeof payload[campo] === 'string' && !payload[campo].trim())
         ) {
-          throw Object.assign(new Error(`Campo '${campo}' requerido`), { statusCode: 400 });
+          throw ApiError.badRequest(`Campo '${campo}' requerido`);
         }
       }
     }
@@ -91,7 +97,7 @@ class SalonService {
   async _validarBloqueRegistrado(nombreBloque) {
     const bloque = await bloqueRepository.findByNombre(nombreBloque);
     if (!bloque) {
-      throw Object.assign(new Error(`El bloque '${nombreBloque}' no está registrado`), { statusCode: 400 });
+      throw ApiError.badRequest(`El bloque '${nombreBloque}' no está registrado`);
     }
   }
 }

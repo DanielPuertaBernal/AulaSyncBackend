@@ -4,7 +4,9 @@
  * Equivale a application/services/docente_service.py + infrastructure/importers/docente_excel_importer.py
  */
 const docenteRepository = require('./docente.repository');
+const ApiError = require('../../shared/errors/api.error');
 const { parseExcel, cleanText, cleanDocumento } = require('../../shared/utils/excel.parser');
+const { normalizeDocumento, normalizeLookupKey } = require('../../shared/utils/normalize.helper');
 
 class DocenteService {
   async listar() {
@@ -12,14 +14,14 @@ class DocenteService {
   }
 
   async buscarPorDocumento(documento) {
-    const doc = await docenteRepository.findByDocumento(String(documento).replace('.0', ''));
-    if (!doc) throw Object.assign(new Error('Docente no encontrado'), { statusCode: 404 });
+    const doc = await docenteRepository.findByDocumento(normalizeDocumento(documento));
+    if (!doc) throw ApiError.notFound('Docente no encontrado');
     return doc;
   }
 
   async buscarPorCarnet(idCarnet) {
     const doc = await docenteRepository.findByCarnet(idCarnet);
-    if (!doc) throw Object.assign(new Error('Docente no encontrado por carnet'), { statusCode: 404 });
+    if (!doc) throw ApiError.notFound('Docente no encontrado por carnet');
     return doc;
   }
 
@@ -35,7 +37,7 @@ class DocenteService {
    */
   async importarDesdeExcel(buffer) {
     const rows = parseExcel(buffer);
-    if (!rows.length) throw Object.assign(new Error('El archivo Excel está vacío'), { statusCode: 400 });
+    if (!rows.length) throw ApiError.badRequest('El archivo Excel está vacío');
 
     const docentes = rows
       .map((row) => {
@@ -54,7 +56,7 @@ class DocenteService {
       .filter(Boolean);
 
     if (!docentes.length) {
-      throw Object.assign(new Error('No se encontraron docentes válidos en el archivo'), { statusCode: 400 });
+      throw ApiError.badRequest('No se encontraron docentes válidos en el archivo');
     }
 
     const result = await docenteRepository.bulkUpsert(docentes);
@@ -65,11 +67,7 @@ class DocenteService {
   _normalizarColumnas(row) {
     const normalized = {};
     for (const [key, value] of Object.entries(row)) {
-      const clean = key
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .trim();
+      const clean = normalizeLookupKey(key);
       normalized[clean] = value;
     }
     return normalized;

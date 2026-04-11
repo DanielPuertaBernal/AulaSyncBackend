@@ -4,6 +4,7 @@ const docenteRepository = require('../docentes/docente.repository');
 const programacionRepository = require('../programacion/programacion.repository');
 const monitorRepository = require('../monitores/monitor.repository');
 const ubicacionService = require('../ubicaciones/ubicacion.service');
+const ApiError = require('../../shared/errors/api.error');
 const { generateExcel } = require('../../shared/utils/excel.parser');
 const {
   getFechaHoy,
@@ -13,6 +14,11 @@ const {
   calcularTiempoRetraso,
   esReclamoAnticipado,
 } = require('../../shared/utils/date.helper');
+const {
+  normalizeAula,
+  normalizeHorario,
+  normalizeString,
+} = require('../../shared/utils/normalize.helper');
 const {
   normalizarDocumento,
   matchMonitorClase,
@@ -113,7 +119,7 @@ class LlaveService {
     const ubicacionPrestamo = await this._normalizarUbicacionPrestamo(ubicacion);
     const persona = await this._buscarPersonaPorCarnet(id_carnet);
     if (!persona) {
-      throw Object.assign(new Error('Persona no encontrada'), { statusCode: 404 });
+      throw ApiError.notFound('Persona no encontrada');
     }
 
     const { clase, docenteDoc } = await this._buscarClaseParaConfirmacion({
@@ -124,12 +130,12 @@ class LlaveService {
     });
 
     if (!clase) {
-      throw Object.assign(new Error('Clase no encontrada en la programación'), { statusCode: 404 });
+      throw ApiError.notFound('Clase no encontrada en la programación');
     }
 
     const existing = await llaveRepository.findPendienteByDocumento(docenteDoc);
     if (existing) {
-      throw Object.assign(new Error('Ya hay una llave prestada para este docente'), { statusCode: 409 });
+      throw ApiError.conflict('Ya hay una llave prestada para este docente');
     }
 
     const docente = await docenteRepository.findByDocumento(docenteDoc);
@@ -163,7 +169,7 @@ class LlaveService {
     const documento = normalizarDocumento(infoClase.nroidenti);
     const existing = await llaveRepository.findPendienteByDocumento(documento);
     if (existing) {
-      throw Object.assign(new Error('El docente ya tiene una llave prestada'), { statusCode: 409 });
+      throw ApiError.conflict('El docente ya tiene una llave prestada');
     }
 
     const registro = this._construirRegistroEntregaManual({
@@ -185,7 +191,7 @@ class LlaveService {
     const doc = normalizarDocumento(documento);
     const registro = await llaveRepository.findPendienteByDocumento(doc);
     if (!registro) {
-      throw Object.assign(new Error('No se encontró llave en préstamo para este docente'), { statusCode: 404 });
+      throw ApiError.notFound('No se encontró llave en préstamo para este docente');
     }
 
     const ubicacionDevolucion = await this._normalizarUbicacionDevolucion(ubicacion);
@@ -583,7 +589,7 @@ class LlaveService {
   _validarEntregaManual(infoClase) {
     for (const campo of ['nroidenti', 'profesor', 'aula']) {
       if (!infoClase[campo]) {
-        throw Object.assign(new Error(`Campo '${campo}' requerido`), { statusCode: 400 });
+        throw ApiError.badRequest(`Campo '${campo}' requerido`);
       }
     }
   }
@@ -616,9 +622,9 @@ class LlaveService {
   }
 
   async _coincideConProgramacion(registro, cacheProgramacionPorDia) {
-    const dia = String(registro?.dia || '').trim();
-    const horario = String(registro?.horario || '').trim().toUpperCase();
-    const aula = String(registro?.aula || '').trim().toUpperCase();
+    const dia = normalizeString(registro?.dia);
+    const horario = normalizeHorario(registro?.horario);
+    const aula = normalizeAula(registro?.aula);
     const documento = normalizarDocumento(registro?.numero_documento);
 
     if (!dia || !horario || !aula || !documento) return false;
@@ -631,14 +637,14 @@ class LlaveService {
     const clases = cacheProgramacionPorDia.get(dia) || [];
     return clases.some((clase) => (
       normalizarDocumento(clase.numero_documento) === documento
-      && String(clase.horario || '').trim().toUpperCase() === horario
-      && String(clase.aula || '').trim().toUpperCase() === aula
+      && normalizeHorario(clase.horario) === horario
+      && normalizeAula(clase.aula) === aula
     ));
   }
 
   _normalizarOrigenRegistro(origen = 'individual') {
     if (!['individual', 'programacion'].includes(origen)) {
-      throw Object.assign(new Error('Origen de préstamo no válido'), { statusCode: 400 });
+      throw ApiError.badRequest('Origen de préstamo no válido');
     }
     return origen;
   }

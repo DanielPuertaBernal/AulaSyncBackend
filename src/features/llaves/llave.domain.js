@@ -1,31 +1,35 @@
 'use strict';
 
 const { horaAMinutos } = require('../../shared/utils/date.helper');
+const {
+  normalizeString,
+  normalizeDocumento,
+  normalizeHorario,
+  normalizeAula,
+} = require('../../shared/utils/normalize.helper');
 
-function normalizarDocumento(value = '') {
-  return String(value || '').replace('.0', '').trim();
-}
+const normalizarDocumento = normalizeDocumento;
 
 function matchMonitorClase(asignacion, clase) {
-  const materiaMatch = String(asignacion?.materia || '').trim().toLowerCase() ===
-    String(clase?.materia || '').trim().toLowerCase();
+  const materiaMatch = normalizeString(asignacion?.materia).toLowerCase() ===
+    normalizeString(clase?.materia).toLowerCase();
   if (!materiaMatch) return false;
 
   if (asignacion?.dia && asignacion?.horario) {
-    return String(asignacion.horario || '').trim() === String(clase?.horario || '').trim();
+    return normalizeString(asignacion.horario) === normalizeString(clase?.horario);
   }
 
   return true;
 }
 
 function horarioCubiertoPorPrestamo(horarioClase, horariosProcesados) {
-  const partes = String(horarioClase || '').toUpperCase().split(' A ');
+  const partes = normalizeHorario(horarioClase).split(' A ');
   const claseInicio = horaAMinutos(partes[0]?.trim());
   const claseFin = horaAMinutos(partes[1]?.trim());
   if (claseInicio === null || claseFin === null) return false;
 
   return (horariosProcesados || []).some((horarioProcesado) => {
-    const procesado = String(horarioProcesado || '').toUpperCase().split(' A ');
+    const procesado = normalizeHorario(horarioProcesado).split(' A ');
     const inicioProcesado = horaAMinutos(procesado[0]?.trim());
     const finProcesado = horaAMinutos(procesado[1]?.trim());
     if (inicioProcesado === null || finProcesado === null) return false;
@@ -38,7 +42,7 @@ function agruparClasesConsecutivas(clases = []) {
 
   for (const clase of clases) {
     const documento = normalizarDocumento(clase?.numero_documento);
-    const aula = String(clase?.aula || '').trim().toUpperCase();
+    const aula = normalizeAula(clase?.aula);
     const key = `${documento}||${aula}`;
     if (!grupos.has(key)) grupos.set(key, []);
     grupos.get(key).push(clase);
@@ -53,8 +57,8 @@ function agruparClasesConsecutivas(clases = []) {
     }
 
     bloques.sort((a, b) => {
-      const inicioA = String(a?.horario || '').toUpperCase().split(' A ')[0]?.trim();
-      const inicioB = String(b?.horario || '').toUpperCase().split(' A ')[0]?.trim();
+      const inicioA = normalizeHorario(a?.horario).split(' A ')[0]?.trim();
+      const inicioB = normalizeHorario(b?.horario).split(' A ')[0]?.trim();
       return (horaAMinutos(inicioA) ?? 0) - (horaAMinutos(inicioB) ?? 0);
     });
 
@@ -63,14 +67,14 @@ function agruparClasesConsecutivas(clases = []) {
 
     for (let i = 1; i < bloques.length; i += 1) {
       const siguiente = bloques[i];
-      const finActualStr = String(actual?.horario || '').toUpperCase().split(' A ')[1]?.trim();
-      const inicioSiguienteStr = String(siguiente?.horario || '').toUpperCase().split(' A ')[0]?.trim();
+      const finActualStr = normalizeHorario(actual?.horario).split(' A ')[1]?.trim();
+      const inicioSiguienteStr = normalizeHorario(siguiente?.horario).split(' A ')[0]?.trim();
       const finActual = horaAMinutos(finActualStr);
       const inicioSiguiente = horaAMinutos(inicioSiguienteStr);
 
       if (finActual !== null && inicioSiguiente !== null && finActual === inicioSiguiente) {
-        const horaInicio = String(actual?.horario || '').toUpperCase().split(' A ')[0]?.trim();
-        const horaFin = String(siguiente?.horario || '').toUpperCase().split(' A ')[1]?.trim();
+        const horaInicio = normalizeHorario(actual?.horario).split(' A ')[0]?.trim();
+        const horaFin = normalizeHorario(siguiente?.horario).split(' A ')[1]?.trim();
         actual.horario = `${horaInicio} A ${horaFin}`;
         actual.hora_fin = horaFin;
         materias.push(siguiente.materia || '');
@@ -94,7 +98,7 @@ function encontrarClaseActual(clases = [], minutosAhora) {
   let menorDiff = Number.POSITIVE_INFINITY;
 
   for (const clase of clases) {
-    const horario = String(clase?.horario || '').toUpperCase();
+    const horario = normalizeHorario(clase?.horario);
     const partes = horario.split(' A ');
     if (partes.length < 2) continue;
 
@@ -127,7 +131,7 @@ function calcularEstadoVisual(registro, limiteHorasDemora = 4) {
     : (registro?.fecha_hora_entrega ? new Date(registro.fecha_hora_entrega) : null);
   if (!fechaEntrega || Number.isNaN(fechaEntrega.getTime())) return estadoActual;
 
-  const horario = String(registro?.horario || '').toUpperCase().split(' A ');
+  const horario = normalizeHorario(registro?.horario).split(' A ');
   if (horario.length < 2) return estadoActual;
 
   const finMinutos = horaAMinutos(String(horario[1] || '').trim());

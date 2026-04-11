@@ -1,7 +1,9 @@
 'use strict';
 const programacionRepository = require('./programacion.repository');
+const ApiError = require('../../shared/errors/api.error');
 const { parseExcel, cleanText, cleanDocumento, generateExcel } = require('../../shared/utils/excel.parser');
 const { getDiaActual, horaAMinutos } = require('../../shared/utils/date.helper');
+const { normalizeDocumento, normalizeString, normalizeUpperString } = require('../../shared/utils/normalize.helper');
 
 class ProgramacionService {
   async listar() {
@@ -13,10 +15,10 @@ class ProgramacionService {
     const clases = await programacionRepository.findByDia(diaFiltro);
 
     return clases.filter((clase) => {
-      const doc = String(clase.numero_documento).replace('.0', '');
-      const horario = String(clase.horario || '').trim();
+      const doc = normalizeDocumento(clase.numero_documento);
+      const horario = normalizeString(clase.horario);
       const yaEntregada = clasesConLlave.some(
-        (c) => String(c.documento).replace('.0', '') === doc && String(c.horario).trim() === horario
+        (c) => normalizeDocumento(c.documento) === doc && normalizeString(c.horario) === horario
       );
       return !yaEntregada;
     });
@@ -29,11 +31,11 @@ class ProgramacionService {
 
   async importarDesdeExcel(buffer) {
     const rows = parseExcel(buffer);
-    if (!rows.length) throw Object.assign(new Error('El archivo Excel está vacío'), { statusCode: 400 });
+    if (!rows.length) throw ApiError.badRequest('El archivo Excel está vacío');
 
     const limpios = this._limpiarProgramacion(rows);
     if (!limpios.length) {
-      throw Object.assign(new Error('No se encontraron registros válidos en el archivo'), { statusCode: 400 });
+      throw ApiError.badRequest('No se encontraron registros válidos en el archivo');
     }
 
     const consolidados = this._unificarHorarios(limpios);
@@ -137,7 +139,7 @@ class ProgramacionService {
 
     const grupos = new Map();
     for (const reg of registros) {
-      const clave = CAMPOS_AGRUPACION.map((c) => String(reg[c] || '').toUpperCase()).join('|');
+      const clave = CAMPOS_AGRUPACION.map((c) => normalizeUpperString(reg[c])).join('|');
       if (!grupos.has(clave)) grupos.set(clave, []);
       grupos.get(clave).push(reg);
     }

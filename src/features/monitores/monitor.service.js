@@ -2,6 +2,7 @@
 const monitorRepository = require('./monitor.repository');
 const docenteRepository = require('../docentes/docente.repository');
 const programacionRepository = require('../programacion/programacion.repository');
+const ApiError = require('../../shared/errors/api.error');
 
 class MonitorService {
   async listarTodos() {
@@ -18,13 +19,13 @@ class MonitorService {
 
   async registrar({ numero_documento_docente, numero_documento_monitor, materia, aula, horario, dia }) {
     const docente = await docenteRepository.findByDocumento(numero_documento_docente);
-    if (!docente) throw Object.assign(new Error('Docente no encontrado'), { statusCode: 404 });
+    if (!docente) throw ApiError.notFound('Docente no encontrado');
 
     const monitor = await docenteRepository.findByDocumento(numero_documento_monitor);
-    if (!monitor) throw Object.assign(new Error('Persona no encontrada en el sistema'), { statusCode: 404 });
+    if (!monitor) throw ApiError.notFound('Persona no encontrada en el sistema');
 
     if (numero_documento_docente === numero_documento_monitor) {
-      throw Object.assign(new Error('El docente no puede ser monitor de sí mismo'), { statusCode: 400 });
+      throw ApiError.badRequest('El docente no puede ser monitor de sí mismo');
     }
 
     const registro = await monitorRepository.create({
@@ -46,7 +47,7 @@ class MonitorService {
 
   async eliminar(id) {
     const existing = await monitorRepository.findById(id);
-    if (!existing) throw Object.assign(new Error('Monitor no encontrado'), { statusCode: 404 });
+    if (!existing) throw ApiError.notFound('Monitor no encontrado');
     await monitorRepository.deleteById(id);
     return { ok: true, mensaje: 'Monitor eliminado correctamente' };
   }

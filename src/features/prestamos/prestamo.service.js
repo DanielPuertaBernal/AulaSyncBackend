@@ -5,6 +5,7 @@
  *           + application/services/devolucion_service.py
  */
 const mongoose = require('mongoose');
+const ApiError = require('../../shared/errors/api.error');
 const { prestamoRepository, devolucionRepository } = require('./prestamo.repository');
 const equipoRepository = require('../equipos/equipo.repository');
 const ubicacionService = require('../ubicaciones/ubicacion.service');
@@ -20,7 +21,7 @@ class PrestamoService {
 
   async obtener(id) {
     const p = await prestamoRepository.findById(id);
-    if (!p) throw Object.assign(new Error('Préstamo no encontrado'), { statusCode: 404 });
+    if (!p) throw ApiError.notFound('Préstamo no encontrado');
     return p;
   }
 
@@ -31,7 +32,7 @@ class PrestamoService {
    */
   async crear({ docente_codigo_nfc, docente_nombre, equipos, auxiliar_prestamista, ubicacion_prestamo = UBICACION_OFICINA }) {
     if (!equipos || !equipos.length) {
-      throw Object.assign(new Error('Debe prestar al menos un equipo'), { statusCode: 400 });
+      throw ApiError.badRequest('Debe prestar al menos un equipo');
     }
 
     const ubicacionPrestamo = await this._validarUbicacionOperacion(
@@ -50,7 +51,7 @@ class PrestamoService {
       const detalles = await Promise.all(
         equiposIds.map(async (id) => {
           const equipo = await equipoRepository.findById(id);
-          if (!equipo) throw Object.assign(new Error(`Equipo ${id} no encontrado`), { statusCode: 404 });
+          if (!equipo) throw ApiError.notFound(`Equipo ${id} no encontrado`);
           return {
             equipo_id: new mongoose.Types.ObjectId(id),
             equipo_nombre: equipo.nombre,
@@ -105,12 +106,12 @@ class PrestamoService {
   async agregarEquipo(prestamoId, equipoId, auxiliar) {
     const prestamo = await this.obtener(prestamoId);
     if (prestamo.estado === 'completamente_devuelto') {
-      throw Object.assign(new Error('El préstamo ya fue devuelto completamente'), { statusCode: 400 });
+      throw ApiError.badRequest('El préstamo ya fue devuelto completamente');
     }
 
     await this._validarDisponibilidad([equipoId]);
     const equipo = await equipoRepository.findById(equipoId);
-    if (!equipo) throw Object.assign(new Error('Equipo no encontrado'), { statusCode: 404 });
+    if (!equipo) throw ApiError.notFound('Equipo no encontrado');
 
     const detalle = {
       equipo_id: new mongoose.Types.ObjectId(equipoId),
@@ -141,7 +142,7 @@ class PrestamoService {
   }) {
     const prestamo = await this.obtener(prestamo_id);
     if (prestamo.estado === 'completamente_devuelto') {
-      throw Object.assign(new Error('El préstamo ya fue devuelto completamente'), { statusCode: 400 });
+      throw ApiError.badRequest('El préstamo ya fue devuelto completamente');
     }
 
     const ubicacionDevolucion = await this._validarUbicacionOperacion(
@@ -226,10 +227,7 @@ class PrestamoService {
       const prestado = await prestamoRepository.verificarEquipoPrestado(id, session);
       if (prestado) {
         const eq = await equipoRepository.findById(id);
-        throw Object.assign(
-          new Error(`El equipo '${eq?.nombre || id}' ya está prestado`),
-          { statusCode: 409 }
-        );
+        throw ApiError.conflict(`El equipo '${eq?.nombre || id}' ya está prestado`);
       }
     }
   }
@@ -238,7 +236,7 @@ class PrestamoService {
     try {
       return await ubicacionService.validarOperacion(ubicacion, OPERACIONES_UBICACION.PRESTAMO_EQUIPOS);
     } catch (err) {
-      throw Object.assign(new Error(mensaje || err.message), { statusCode: err.statusCode || 400 });
+      throw new ApiError(mensaje || err.message, err.statusCode || 400);
     }
   }
 }
