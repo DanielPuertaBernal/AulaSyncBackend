@@ -68,6 +68,9 @@ class UsuarioService {
     if (!updated) {
       throw Object.assign(new Error(`Usuario '${username}' no encontrado`), { statusCode: 404 });
     }
+    if (!activo) {
+      await authRepository.revokeAllRefreshSessions(updated._id);
+    }
     return updated;
   }
 
@@ -117,6 +120,7 @@ class UsuarioService {
 
     const newHash = await authService.hashPassword(passwordNueva);
     await usuarioRepository.updatePassword(username, newHash);
+    await authRepository.revokeAllRefreshSessions(user._id);
     return true;
   }
 

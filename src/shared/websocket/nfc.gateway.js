@@ -5,8 +5,16 @@
  * Emite eventos NFC en tiempo real al frontend via Socket.io
  */
 const { EventEmitter } = require('events');
+const jwt = require('jsonwebtoken');
+const {
+  NFC_MODOS,
+  NFC_MODOS_PERMITIDOS,
+  UBICACIONES,
+} = require('../constants/nfc.constants');
 
-const DEBOUNCE_MS = 2000;
+const DEBOUNCE_MS = parseInt(process.env.NFC_DEBOUNCE_MS || '2000', 10);
+const JWT_ISSUER = process.env.JWT_ISSUER || 'aulasync-api';
+const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'aulasync-clients';
 
 class NFCGateway extends EventEmitter {
   constructor() {
@@ -16,7 +24,7 @@ class NFCGateway extends EventEmitter {
     this._lastRead = '';
     this._lastReadTime = 0;
     this._active = false;
-    this._modo = 'auto'; // 'auto' | 'identificacion'
+    this._modo = NFC_MODOS.AUTO;
   }
 
   get modo() {
@@ -35,14 +43,42 @@ class NFCGateway extends EventEmitter {
 
   _registerSocketHandlers() {
     const nsp = this._io.of('/nfc');
+
+    nsp.use((socket, next) => {
+      const authToken = String(socket.handshake.auth?.token || '');
+      const authHeader = String(socket.handshake.headers?.authorization || '');
+      const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+      const token = authToken || bearerToken;
+
+      if (!token) {
+        return next(new Error('No autenticado para usar el canal NFC'));
+      }
+
+      try {
+        const payload = jwt.verify(token, process.env.JWT_SECRET, {
+          issuer: JWT_ISSUER,
+          audience: JWT_AUDIENCE,
+        });
+
+        if (payload?.type !== 'access') {
+          return next(new Error('Tipo de token inválido para el canal NFC'));
+        }
+
+        socket.data.user = payload;
+        return next();
+      } catch (_) {
+        return next(new Error('Token inválido para el canal NFC'));
+      }
+    });
+
     nsp.on('connection', (socket) => {
-      console.log(`🔌 Cliente NFC conectado: ${socket.id}`);
+      console.log(`🔌 Cliente NFC conectado: ${socket.id} (${socket.data.user?.usuario || 'desconocido'})`);
       socket.emit('nfc:status', { activo: this._active, mensaje: 'Conectado al servidor NFC' });
 
       socket.on('nfc:start', () => this._startListening(nsp));
       socket.on('nfc:stop', () => this._stopListening(nsp));
       socket.on('nfc:set_modo', ({ modo }) => {
-        if (['auto', 'identificacion'].includes(modo)) {
+        if (NFC_MODOS_PERMITIDOS.includes(modo)) {
           this._modo = modo;
           nsp.emit('nfc:modo', { modo });
         }
@@ -147,7 +183,7 @@ class NFCGateway extends EventEmitter {
     this.emit('resultado', data);
   }
 
-  emitirCarnetLeido(idCarnet, ubicacion = 'oficina_centro_servicios_docentes') {
+  emitirCarnetLeido(idCarnet, ubicacion = UBICACIONES.OFICINA) {
     if (this._io) {
       this._io.of('/nfc').emit('nfc:carnet_leido', {
         id_carnet: idCarnet,

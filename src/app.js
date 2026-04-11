@@ -19,6 +19,7 @@ const nfcRoutes = require('./features/nfc/nfc.routes');
 const monitorRoutes = require('./features/monitores/monitor.routes');
 const salonRoutes = require('./features/salones/salon.routes');
 const bloqueRoutes = require('./features/bloques/bloque.routes');
+const ubicacionRoutes = require('./features/ubicaciones/ubicacion.routes');
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use('/api/nfc', nfcRoutes);
 app.use('/api/monitores', monitorRoutes);
 app.use('/api/salones', salonRoutes);
 app.use('/api/bloques', bloqueRoutes);
+app.use('/api/ubicaciones', ubicacionRoutes);
 
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => {

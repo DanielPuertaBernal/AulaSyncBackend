@@ -7,8 +7,11 @@
 const mongoose = require('mongoose');
 const { prestamoRepository, devolucionRepository } = require('./prestamo.repository');
 const equipoRepository = require('../equipos/equipo.repository');
-
-const UBICACION_OFICINA = 'oficina_centro_servicios_docentes';
+const ubicacionService = require('../ubicaciones/ubicacion.service');
+const {
+  OPERACIONES_UBICACION,
+  UBICACIONES: { OFICINA: UBICACION_OFICINA },
+} = require('../../shared/constants/nfc.constants');
 
 class PrestamoService {
   async listar() { return prestamoRepository.findAll(); }
@@ -31,7 +34,10 @@ class PrestamoService {
       throw Object.assign(new Error('Debe prestar al menos un equipo'), { statusCode: 400 });
     }
 
-    this._validarUbicacionOficina(ubicacion_prestamo, 'Los préstamos de equipos solo se registran en la Oficina Centro de Servicios Docentes');
+    const ubicacionPrestamo = await this._validarUbicacionOperacion(
+      ubicacion_prestamo,
+      'La ubicación seleccionada no está autorizada para préstamos de equipos'
+    );
 
     const equiposIds = this._normalizarEquipos(equipos);
 
@@ -67,7 +73,7 @@ class PrestamoService {
           {
             docente_nombre: docente_nombre || prestamoAbierto.docente_nombre,
             auxiliar_prestamista: auxiliar_prestamista || prestamoAbierto.auxiliar_prestamista || 'Auxiliar',
-            ubicacion_prestamo: UBICACION_OFICINA,
+            ubicacion_prestamo: ubicacionPrestamo,
             equipos: [...(prestamoAbierto.equipos || []), ...detalles],
           },
           session
@@ -77,7 +83,7 @@ class PrestamoService {
           docente_codigo_nfc,
           docente_nombre,
           auxiliar_prestamista: auxiliar_prestamista || 'Auxiliar',
-          ubicacion_prestamo: UBICACION_OFICINA,
+          ubicacion_prestamo: ubicacionPrestamo,
           equipos: detalles,
           estado: 'activo',
         }, session);
@@ -138,7 +144,10 @@ class PrestamoService {
       throw Object.assign(new Error('El préstamo ya fue devuelto completamente'), { statusCode: 400 });
     }
 
-    this._validarUbicacionOficina(ubicacion_devolucion, 'Las devoluciones de equipos solo se registran en la Oficina Centro de Servicios Docentes');
+    const ubicacionDevolucion = await this._validarUbicacionOperacion(
+      ubicacion_devolucion,
+      'La ubicación seleccionada no está autorizada para devoluciones de equipos'
+    );
 
     const equiposADevolver = equipos && equipos.length
       ? this._normalizarEquipos(equipos)
@@ -185,7 +194,7 @@ class PrestamoService {
         prestamo_id: new mongoose.Types.ObjectId(prestamo_id),
         docente_codigo_nfc,
         docente_nombre,
-        ubicacion_devolucion: UBICACION_OFICINA,
+        ubicacion_devolucion: ubicacionDevolucion,
         equipos_devueltos: equiposDevueltos,
         auxiliar_que_recibio: auxiliar_que_recibio || 'Auxiliar',
         es_devolucion_completa: esCompleta,
@@ -225,9 +234,11 @@ class PrestamoService {
     }
   }
 
-  _validarUbicacionOficina(ubicacion, mensaje) {
-    if (ubicacion !== UBICACION_OFICINA) {
-      throw Object.assign(new Error(mensaje), { statusCode: 400 });
+  async _validarUbicacionOperacion(ubicacion, mensaje) {
+    try {
+      return await ubicacionService.validarOperacion(ubicacion, OPERACIONES_UBICACION.PRESTAMO_EQUIPOS);
+    } catch (err) {
+      throw Object.assign(new Error(mensaje || err.message), { statusCode: err.statusCode || 400 });
     }
   }
 }

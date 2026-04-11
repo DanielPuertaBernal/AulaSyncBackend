@@ -1,26 +1,42 @@
 'use strict';
 const llaveService = require('../llaves/llave.service');
 const nfcGateway = require('../../shared/websocket/nfc.gateway');
-
-const UBICACION_OFICINA = 'oficina_centro_servicios_docentes';
+const ubicacionService = require('../ubicaciones/ubicacion.service');
+const {
+  NFC_MODOS,
+  OPERACIONES_UBICACION,
+  UBICACIONES: { OFICINA: UBICACION_OFICINA },
+} = require('../../shared/constants/nfc.constants');
 
 class NFCService {
   /**
    * Procesa lectura RFID del ESP32: identifica docente, ejecuta préstamo/devolución
    * y emite evento WebSocket al frontend
    */
-  async procesarLectura(idCarnet, ubicacion = 'oficina_centro_servicios_docentes') {
+  async procesarLectura(idCarnet, ubicacion = UBICACION_OFICINA) {
     // Modo identificacion: solo emitir carnet sin procesar programación
-    if (nfcGateway.modo === 'identificacion') {
-      if (ubicacion !== UBICACION_OFICINA) {
+    if (nfcGateway.modo === NFC_MODOS.IDENTIFICACION) {
+      try {
+        const ubicacionValidada = await ubicacionService.validarOperacion(ubicacion, OPERACIONES_UBICACION.IDENTIFICACION);
+        nfcGateway.emitirCarnetLeido(idCarnet, ubicacionValidada);
+        return { ok: true, tipo: NFC_MODOS.IDENTIFICACION, mensaje: 'Carnet identificado' };
+      } catch (err) {
         return {
           ok: false,
           tipo: 'error',
-          mensaje: 'La identificación para préstamos de equipos solo se permite en la Oficina Centro de Servicios Docentes',
+          mensaje: err.message,
         };
       }
-      nfcGateway.emitirCarnetLeido(idCarnet, ubicacion);
-      return { ok: true, tipo: 'identificacion', mensaje: 'Carnet identificado' };
+    }
+
+    try {
+      await ubicacionService.obtenerPorClave(ubicacion);
+    } catch (err) {
+      return {
+        ok: false,
+        tipo: 'error',
+        mensaje: err.message,
+      };
     }
 
     const resultado = await llaveService.procesarLecturaNFC(idCarnet, ubicacion);

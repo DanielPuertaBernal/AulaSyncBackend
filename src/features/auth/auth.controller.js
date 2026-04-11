@@ -10,7 +10,10 @@ class AuthController {
    */
   async login(req, res) {
     const { usuario, password } = req.body;
-    const result = await authService.login(usuario, password);
+    const result = await authService.login(usuario, password, {
+      userAgent: req.headers['user-agent'],
+      ip: req.ip,
+    });
 
     if (!result.ok) {
       return res.status(401).json({ ok: false, message: result.mensaje });
@@ -33,6 +36,7 @@ class AuthController {
    * En una implementación con blacklist se agregaría aquí.
    */
   async logout(req, res) {
+    await authService.logout(req.user?.sub, req.body?.refreshToken || '');
     return res.status(200).json({ ok: true, message: 'Sesión cerrada correctamente' });
   }
 
@@ -56,8 +60,11 @@ class AuthController {
     if (!refreshToken) {
       return res.status(400).json({ ok: false, message: 'refreshToken requerido' });
     }
-    const result = await authService.refresh(refreshToken);
-    return res.status(200).json({ ok: true, data: { token: result.token } });
+    const result = await authService.refresh(refreshToken, {
+      userAgent: req.headers['user-agent'],
+      ip: req.ip,
+    });
+    return res.status(200).json({ ok: true, data: { token: result.token, refreshToken: result.refreshToken } });
   }
 }
 

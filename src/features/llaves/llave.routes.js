@@ -4,9 +4,10 @@ const { z } = require('zod');
 const llaveController = require('./llave.controller');
 const { requireAuth } = require('../auth/auth.middleware');
 const { validate } = require('../../shared/middlewares/validate.middleware');
+const { UBICACIONES } = require('../../shared/constants/nfc.constants');
 
 const router = Router();
-const ubicacionSchema = z.enum(['oficina_centro_servicios_docentes', 'porteria_superior']);
+const ubicacionSchema = z.string().trim().min(1, 'ubicacion es requerida');
 const origenSchema = z.enum(['individual', 'programacion']);
 
 const entregarSchema = z.object({
@@ -18,13 +19,13 @@ const entregarSchema = z.object({
   dia: z.string().optional().default(''),
   facultad: z.string().optional().default('No especificada'),
   motivo: z.string().optional().default(''),
-  ubicacion: ubicacionSchema.optional().default('oficina_centro_servicios_docentes'),
+  ubicacion: ubicacionSchema.optional().default(UBICACIONES.OFICINA),
   origen: origenSchema.optional().default('individual'),
 });
 
 const procesarNFCSchema = z.object({
   id_carnet: z.string().min(1, 'id_carnet requerido'),
-  ubicacion: ubicacionSchema.optional().default('oficina_centro_servicios_docentes'),
+  ubicacion: ubicacionSchema.optional().default(UBICACIONES.OFICINA),
 });
 
 const confirmarAnticipadoSchema = z.object({
@@ -34,7 +35,7 @@ const confirmarAnticipadoSchema = z.object({
   rol: z.enum(['docente', 'monitor']).optional().default('docente'),
   documento_persona: z.string().optional().default(''),
   nombre_persona: z.string().optional().default(''),
-  ubicacion: ubicacionSchema.optional().default('oficina_centro_servicios_docentes'),
+  ubicacion: ubicacionSchema.optional().default(UBICACIONES.OFICINA),
 });
 
 router.get('/pendientes', ...requireAuth, (req, res) => llaveController.pendientes(req, res));

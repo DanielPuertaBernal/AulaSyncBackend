@@ -11,6 +11,18 @@ const ROLES = {
   AUX: 'auxiliar_programacion',
 };
 
+const sesionSchema = new mongoose.Schema(
+  {
+    token_hash: { type: String, required: true },
+    user_agent: { type: String, default: '' },
+    ip: { type: String, default: '' },
+    created_at: { type: Date, default: Date.now },
+    expires_at: { type: Date, required: true },
+    revoked_at: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
 const usuarioSchema = new mongoose.Schema(
   {
     usuario: {
@@ -53,6 +65,11 @@ const usuarioSchema = new mongoose.Schema(
     activo: {
       type: Boolean,
       default: true,
+    },
+    sesiones: {
+      type: [sesionSchema],
+      default: [],
+      select: false,
     },
     fecha_creacion: {
       type: Date,

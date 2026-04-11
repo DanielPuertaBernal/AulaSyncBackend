@@ -5,11 +5,15 @@
  */
 const jwt = require('jsonwebtoken');
 const { ROLES } = require('./auth.schema');
+const usuarioRepository = require('../usuarios/usuario.repository');
+
+const JWT_ISSUER = process.env.JWT_ISSUER || 'aulasync-api';
+const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'aulasync-clients';
 
 /**
  * Middleware: verifica el token JWT en el header Authorization
  */
-function verifyToken(req, res, next) {
+async function verifyToken(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ ok: false, message: 'Token no proporcionado' });
@@ -17,7 +21,27 @@ function verifyToken(req, res, next) {
 
   const token = authHeader.split(' ')[1];
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    const payload = jwt.verify(token, process.env.JWT_SECRET, {
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    });
+
+    if (payload?.type !== 'access') {
+      return res.status(401).json({ ok: false, message: 'Tipo de token inválido' });
+    }
+
+    const currentUser = await usuarioRepository.findById(payload.sub);
+    if (!currentUser || !currentUser.activo) {
+      return res.status(401).json({ ok: false, message: 'Usuario no autorizado o inactivo' });
+    }
+
+    req.user = {
+      sub: currentUser._id.toString(),
+      usuario: currentUser.usuario,
+      rol: currentUser.rol,
+      nombre: currentUser.nombre,
+      type: 'access',
+    };
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
