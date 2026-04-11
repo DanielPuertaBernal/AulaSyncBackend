@@ -23,12 +23,32 @@ class NFCGateway extends EventEmitter {
     this._port = null;
     this._lastRead = '';
     this._lastReadTime = 0;
+    this._lastReadAt = null;
     this._active = false;
+    this._desiredActive = false;
+    this._opening = false;
     this._modo = NFC_MODOS.AUTO;
+    this._lastError = '';
+    this._reconnectTimer = null;
+    this._portPath = process.env.NFC_PORT || '/dev/ttyUSB0';
+    this._baudRate = parseInt(process.env.NFC_BAUD_RATE || '9600', 10);
   }
 
   get modo() {
     return this._modo;
+  }
+
+  obtenerEstado() {
+    return {
+      activo: this._active,
+      escuchando: this._desiredActive,
+      modo: this._modo,
+      puerto: this._portPath,
+      puertoAbierto: Boolean(this._port?.isOpen),
+      ultimoCodigo: this._lastRead || null,
+      ultimaLectura: this._lastReadAt,
+      ultimoError: this._lastError || null,
+    };
   }
 
   /**
@@ -39,6 +59,33 @@ class NFCGateway extends EventEmitter {
     this._io = io;
     this._registerSocketHandlers();
     await this._connectSerial();
+  }
+
+  _emitStatus(mensaje = '') {
+    if (!this._io) return;
+    this._io.of('/nfc').emit('nfc:status', {
+      ...this.obtenerEstado(),
+      mensaje,
+    });
+  }
+
+  _emitError(mensaje) {
+    this._lastError = mensaje;
+    if (this._io) {
+      this._io.of('/nfc').emit('nfc:error', { mensaje });
+    }
+    this._emitStatus(mensaje);
+  }
+
+  _scheduleReconnect() {
+    if (!this._desiredActive || this._reconnectTimer) return;
+
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
+      this._startListening(this._io?.of('/nfc'));
+    }, 1500);
+
+    this._emitStatus('Intentando reconectar lector NFC...');
   }
 
   _registerSocketHandlers() {
@@ -73,7 +120,10 @@ class NFCGateway extends EventEmitter {
 
     nsp.on('connection', (socket) => {
       console.log(`🔌 Cliente NFC conectado: ${socket.id} (${socket.data.user?.usuario || 'desconocido'})`);
-      socket.emit('nfc:status', { activo: this._active, mensaje: 'Conectado al servidor NFC' });
+      socket.emit('nfc:status', {
+        ...this.obtenerEstado(),
+        mensaje: this._active ? 'Escuchando NFC...' : 'Conectado al servidor NFC',
+      });
 
       socket.on('nfc:start', () => this._startListening(nsp));
       socket.on('nfc:stop', () => this._stopListening(nsp));
@@ -81,6 +131,7 @@ class NFCGateway extends EventEmitter {
         if (NFC_MODOS_PERMITIDOS.includes(modo)) {
           this._modo = modo;
           nsp.emit('nfc:modo', { modo });
+          this._emitStatus(`Modo NFC actualizado: ${modo}`);
         }
       });
       socket.on('nfc:simulate', ({ codigo }) => {
@@ -93,50 +144,119 @@ class NFCGateway extends EventEmitter {
   }
 
   async _connectSerial() {
+    if (this._port) return;
+
     try {
       const { SerialPort } = require('serialport');
       const { ReadlineParser } = require('@serialport/parser-readline');
 
-      const portPath = process.env.NFC_PORT || '/dev/ttyUSB0';
-      const baudRate = parseInt(process.env.NFC_BAUD_RATE || '9600', 10);
-
-      this._port = new SerialPort({ path: portPath, baudRate, autoOpen: false });
-      const parser = this._port.pipe(new ReadlineParser({ delimiter: '\n' }));
-
-      parser.on('data', (line) => this._handleNFCRead(line.trim()));
-      this._port.on('error', (err) => {
-        console.warn('⚠️  Error SerialPort NFC:', err.message);
+      this._port = new SerialPort({
+        path: this._portPath,
+        baudRate: this._baudRate,
+        autoOpen: false,
       });
 
-      console.log(`🔧 SerialPort NFC configurado en ${portPath}@${baudRate}`);
+      const parser = this._port.pipe(new ReadlineParser({ delimiter: '\n' }));
+      parser.on('data', (line) => this._handleNFCRead(line.trim()));
+
+      this._port.on('error', (err) => {
+        this._opening = false;
+        const mensaje = `Error SerialPort NFC: ${err.message}`;
+        console.warn('⚠️ ', mensaje);
+        this._emitError(mensaje);
+      });
+
+      this._port.on('close', () => {
+        this._opening = false;
+        const debeReintentar = this._desiredActive;
+        this._active = false;
+
+        if (debeReintentar) {
+          this._emitStatus('Puerto NFC cerrado. Reintentando conexión...');
+          this._scheduleReconnect();
+        }
+      });
+
+      console.log(`🔧 SerialPort NFC configurado en ${this._portPath}@${this._baudRate}`);
     } catch (err) {
-      console.warn('⚠️  serialport no disponible o sin puerto NFC físico:', err.message);
+      const mensaje = `serialport no disponible o sin puerto NFC físico: ${err.message}`;
+      this._lastError = mensaje;
+      console.warn('⚠️ ', mensaje);
     }
   }
 
-  _startListening(nsp) {
-    if (this._active) return;
-    if (this._port && !this._port.isOpen) {
-      this._port.open((err) => {
-        if (err) {
-          nsp.emit('nfc:error', { mensaje: `No se pudo abrir puerto: ${err.message}` });
-          return;
-        }
-        this._active = true;
-        nsp.emit('nfc:status', { activo: true, mensaje: 'Escuchando NFC...' });
-      });
-    } else {
-      this._active = true;
-      nsp.emit('nfc:status', { activo: true, mensaje: 'Escuchando NFC...' });
+  async _startListening(nsp) {
+    this._desiredActive = true;
+    await this._connectSerial();
+
+    if (!this._port) {
+      this._emitError('No hay puerto serial NFC disponible');
+      return;
     }
+
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+
+    if (this._port.isOpen) {
+      this._active = true;
+      this._lastError = '';
+      this._emitStatus('Escuchando NFC...');
+      return;
+    }
+
+    if (this._opening) return;
+
+    this._opening = true;
+    this._port.open((err) => {
+      this._opening = false;
+      if (err) {
+        this._active = false;
+        this._emitError(`No se pudo abrir puerto: ${err.message}`);
+        this._scheduleReconnect();
+        return;
+      }
+
+      this._active = true;
+      this._lastError = '';
+      if (nsp) {
+        nsp.emit('nfc:status', {
+          ...this.obtenerEstado(),
+          mensaje: 'Escuchando NFC...',
+        });
+      } else {
+        this._emitStatus('Escuchando NFC...');
+      }
+    });
   }
 
   _stopListening(nsp) {
+    this._desiredActive = false;
     this._active = false;
-    if (this._port && this._port.isOpen) {
-      this._port.close();
+    this._lastError = '';
+
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
     }
-    nsp && nsp.emit('nfc:status', { activo: false, mensaje: 'NFC detenido' });
+
+    if (this._port && this._port.isOpen) {
+      this._port.close((err) => {
+        if (err) {
+          this._emitError(`No se pudo cerrar el puerto NFC: ${err.message}`);
+        }
+      });
+    }
+
+    if (nsp) {
+      nsp.emit('nfc:status', {
+        ...this.obtenerEstado(),
+        mensaje: 'NFC detenido',
+      });
+    } else {
+      this._emitStatus('NFC detenido');
+    }
   }
 
   /**
@@ -153,8 +273,9 @@ class NFCGateway extends EventEmitter {
 
     this._lastRead = rawData;
     this._lastReadTime = ahora;
+    this._lastReadAt = new Date().toISOString();
 
-    const payload = { codigo: rawData, timestamp: new Date().toISOString() };
+    const payload = { codigo: rawData, timestamp: this._lastReadAt };
     console.log('📡 NFC leído:', payload);
 
     // Emitir al namespace /nfc

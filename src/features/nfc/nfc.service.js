@@ -9,6 +9,10 @@ const {
 } = require('../../shared/constants/nfc.constants');
 
 class NFCService {
+  obtenerEstado() {
+    return nfcGateway.obtenerEstado();
+  }
+
   /**
    * Procesa lectura RFID del ESP32: identifica docente, ejecuta préstamo/devolución
    * y emite evento WebSocket al frontend

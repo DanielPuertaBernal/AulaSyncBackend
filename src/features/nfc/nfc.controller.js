@@ -2,6 +2,10 @@
 const nfcService = require('./nfc.service');
 
 class NFCController {
+  async obtenerEstado(req, res) {
+    return res.json({ ok: true, data: nfcService.obtenerEstado() });
+  }
+
   async procesarLectura(req, res) {
     const { id_carnet, ubicacion } = req.body;
     const resultado = await nfcService.procesarLectura(id_carnet, ubicacion);
