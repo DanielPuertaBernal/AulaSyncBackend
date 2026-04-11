@@ -14,6 +14,7 @@ const ubicacionSchema = z.string().trim().min(1, 'ubicacion es requerida');
 const lecturaSchema = z.object({
   id_carnet: z.string().min(1, 'id_carnet es requerido'),
   ubicacion: ubicacionSchema.optional().default(UBICACIONES.OFICINA),
+  evento_id: z.string().trim().min(1).max(120).optional(),
 });
 
 router.get('/status', ...requireAuth, (req, res) => nfcController.obtenerEstado(req, res));

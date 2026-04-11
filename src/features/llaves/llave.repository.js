@@ -11,11 +11,6 @@ class LlaveRepository {
     return Llave.findOne({ numero_documento: documento, estado: 'en_prestamo' }).lean();
   }
 
-  async findByClientEventId(clientEventId) {
-    if (!clientEventId) return null;
-    return Llave.findOne({ client_event_id: clientEventId }).lean();
-  }
-
   async findByFecha(fechaStr) {
     const start = new Date(`${fechaStr}T00:00:00`);
     const end = new Date(`${fechaStr}T23:59:59.999`);

@@ -2,6 +2,7 @@
 const llaveService = require('../llaves/llave.service');
 const nfcGateway = require('../../shared/websocket/nfc.gateway');
 const ubicacionService = require('../ubicaciones/ubicacion.service');
+const nfcRepository = require('./nfc.repository');
 const {
   NFC_MODOS,
   OPERACIONES_UBICACION,
@@ -17,33 +18,64 @@ class NFCService {
    * Procesa lectura RFID del ESP32: identifica docente, ejecuta préstamo/devolución
    * y emite evento WebSocket al frontend
    */
-  async procesarLectura(idCarnet, ubicacion = UBICACION_OFICINA) {
+  async procesarLectura(idCarnet, ubicacion = UBICACION_OFICINA, options = {}) {
+    const eventoId = String(options?.eventoId || '').trim();
+
+    if (eventoId) {
+      const existente = await nfcRepository.findByEventoId(eventoId);
+      if (existente) {
+        return {
+          ok: Boolean(existente.ok),
+          tipo: existente.tipo_resultado || 'procesado',
+          mensaje: existente.mensaje_resultado || 'Evento NFC ya había sido procesado',
+          data: existente.payload_resultado || null,
+          replayed: true,
+        };
+      }
+    }
     // Modo identificacion: solo emitir carnet sin procesar programación
     if (nfcGateway.modo === NFC_MODOS.IDENTIFICACION) {
       try {
         const ubicacionValidada = await ubicacionService.validarOperacion(ubicacion, OPERACIONES_UBICACION.IDENTIFICACION);
         nfcGateway.emitirCarnetLeido(idCarnet, ubicacionValidada);
-        return { ok: true, tipo: NFC_MODOS.IDENTIFICACION, mensaje: 'Carnet identificado' };
+        return this._guardarResultadoSiAplica(eventoId, idCarnet, ubicacion, {
+          ok: true,
+          tipo: NFC_MODOS.IDENTIFICACION,
+          mensaje: 'Carnet identificado',
+          data: { id_carnet: idCarnet, ubicacion: ubicacionValidada },
+        });
       } catch (err) {
-        return {
+        return this._guardarResultadoSiAplica(eventoId, idCarnet, ubicacion, {
           ok: false,
           tipo: 'error',
           mensaje: err.message,
-        };
+          data: null,
+        });
       }
     }
 
     try {
       await ubicacionService.obtenerPorClave(ubicacion);
     } catch (err) {
-      return {
+      return this._guardarResultadoSiAplica(eventoId, idCarnet, ubicacion, {
         ok: false,
         tipo: 'error',
         mensaje: err.message,
-      };
+        data: null,
+      });
     }
 
-    const resultado = await llaveService.procesarLecturaNFC(idCarnet, ubicacion);
+    let resultado;
+    try {
+      resultado = await llaveService.procesarLecturaNFC(idCarnet, ubicacion);
+    } catch (err) {
+      return this._guardarResultadoSiAplica(eventoId, idCarnet, ubicacion, {
+        ok: false,
+        tipo: 'error',
+        mensaje: err.message || 'No se pudo procesar la lectura NFC',
+        data: null,
+      });
+    }
 
     nfcGateway.emitirLectura({
       ...resultado,
@@ -52,12 +84,27 @@ class NFCService {
       timestamp: new Date().toISOString(),
     });
 
-    return {
+    const respuesta = {
       ok: resultado.tipo !== 'error',
       tipo: resultado.tipo,
       mensaje: resultado.mensaje || this._generarMensaje(resultado),
       data: resultado,
     };
+
+    return this._guardarResultadoSiAplica(eventoId, idCarnet, ubicacion, respuesta);
+  }
+
+  async _guardarResultadoSiAplica(eventoId, idCarnet, ubicacion, respuesta) {
+    if (eventoId) {
+      await nfcRepository.guardarResultado({
+        eventoId,
+        idCarnet,
+        ubicacion,
+        resultado: respuesta,
+      });
+    }
+
+    return respuesta;
   }
 
   _generarMensaje(resultado) {

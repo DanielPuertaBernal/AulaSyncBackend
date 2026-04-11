@@ -21,9 +21,6 @@ const llaveSchema = new mongoose.Schema(
     origen_registro: { type: String, enum: ['individual', 'programacion', ''], default: '' },
     ubicacion_prestamo: { type: String, default: '' },
     ubicacion_devolucion: { type: String, default: '' },
-    client_event_id: { type: String, trim: true },
-    fecha_registro_offline: { type: Date, default: null },
-    sincronizado_desde_offline: { type: Boolean, default: false },
     // Quién reclamó la llave
     quien_reclama: { type: String, enum: ['docente', 'monitor', ''], default: '' },
     numero_documento_reclama: { type: String, default: '' },
@@ -44,8 +41,6 @@ const llaveSchema = new mongoose.Schema(
     versionKey: false,
   }
 );
-
-llaveSchema.index({ client_event_id: 1 }, { unique: true, sparse: true });
 
 const Llave = mongoose.model('Llave', llaveSchema);
 module.exports = { Llave };
