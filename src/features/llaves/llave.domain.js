@@ -1,6 +1,13 @@
 'use strict';
 
-const { horaAMinutos } = require('../../shared/utils/date.helper');
+const {
+  horaAMinutos,
+  getDiaActual,
+  getFechaHoy,
+  calcularRetrasoDevolucion,
+  calcularDuracion,
+  calcularTiempoRetraso,
+} = require('../../shared/utils/date.helper');
 const {
   normalizeString,
   normalizeDocumento,
@@ -118,6 +125,192 @@ function encontrarClaseActual(clases = [], minutosAhora) {
   return mejorClase;
 }
 
+function construirClasesProcesadas(registros = []) {
+  return registros.map((registro) => ({
+    documento: normalizarDocumento(registro?.numero_documento),
+    horario: normalizeString(registro?.horario),
+  }));
+}
+
+function construirResultadoError({ contexto = {}, persona = null, mensaje = '' }) {
+  return {
+    tipo: 'error',
+    mensaje,
+    docente: contexto.docente,
+    persona,
+    rol: contexto.rol,
+  };
+}
+
+function construirResultadoSinClase({ contexto = {}, persona = null, mensaje = 'No hay clases disponibles' }) {
+  return {
+    tipo: 'sin_clase',
+    mensaje,
+    docente: contexto.docente,
+    persona,
+    rol: contexto.rol,
+  };
+}
+
+function construirResultadoAnticipado({ contexto = {}, persona = null, clase = null }) {
+  return {
+    tipo: 'anticipado',
+    docente: contexto.docente,
+    persona,
+    rol: contexto.rol,
+    clase,
+    se_reclamo_a_tiempo: true,
+    mensaje: `${contexto.rol === 'monitor' ? 'El monitor' : 'El docente'} está reclamando la llave con anticipación`,
+  };
+}
+
+function construirResultadoPrestamo({
+  contexto = {},
+  persona = null,
+  clase = null,
+  registro = null,
+  ubicacion = '',
+  seReclamoATiempo = true,
+  tiempoRetraso = '',
+}) {
+  return {
+    tipo: 'prestamo',
+    docente: contexto.docente,
+    persona,
+    rol: contexto.rol,
+    clase,
+    registro,
+    ubicacion,
+    se_reclamo_a_tiempo: seReclamoATiempo,
+    tiempo_retraso: tiempoRetraso,
+  };
+}
+
+function construirResultadoDevolucion({
+  contexto = {},
+  persona = null,
+  result = {},
+  ubicacion = '',
+}) {
+  return {
+    tipo: 'devolucion',
+    ...result,
+    docente: contexto.docente,
+    persona,
+    rol: contexto.rol,
+    ubicacion,
+  };
+}
+
+function construirRegistroPrestamo({
+  docente,
+  clase,
+  seReclamoATiempo,
+  tiempoRetraso,
+  reclamaInfo = {},
+  tipoEntrega = 'carnet',
+  ubicacionPrestamo,
+}) {
+  return {
+    numero_documento: normalizarDocumento(docente?.numero_documento),
+    docente: docente?.nombre || '',
+    dia: clase?.dia || getDiaActual(),
+    horario: clase?.horario || '',
+    aula: clase?.aula || '',
+    facultad: clase?.facultad || 'No especificada',
+    materia: clase?.materia || '',
+    fecha_hora_entrega: new Date(),
+    fecha_hora_devolucion: null,
+    duracion: '',
+    se_reclamo_a_tiempo: seReclamoATiempo,
+    tiempo_retraso: tiempoRetraso || '',
+    retraso_entrega: false,
+    tiempo_retraso_devolucion: '',
+    tipo_entrega: tipoEntrega,
+    origen_registro: 'programacion',
+    ubicacion_prestamo: ubicacionPrestamo,
+    ubicacion_devolucion: '',
+    quien_reclama: reclamaInfo.quien || 'docente',
+    numero_documento_reclama: reclamaInfo.documento || normalizarDocumento(docente?.numero_documento),
+    nombre_reclama: reclamaInfo.nombre || docente?.nombre || '',
+    quien_entrega: '',
+    numero_documento_entrega: '',
+    nombre_entrega: '',
+    estado: 'en_prestamo',
+  };
+}
+
+function construirRegistroEntregaManual({
+  infoClase,
+  documento,
+  ubicacionPrestamo,
+  origenRegistro,
+}) {
+  const ahora = new Date();
+  const horario = (infoClase?.hora_inicio && infoClase?.hora_fin)
+    ? `${infoClase.hora_inicio} A ${infoClase.hora_fin}`
+    : '';
+  const tiempoRetraso = horario ? calcularTiempoRetraso(horario, ahora) : '';
+  const seReclamoATiempo = horario ? !tiempoRetraso : true;
+
+  return {
+    numero_documento: documento,
+    docente: infoClase?.profesor || '',
+    dia: getDiaActual(),
+    horario,
+    aula: infoClase?.aula || '',
+    facultad: infoClase?.facultad || 'No especificada',
+    materia: infoClase?.motivo || '',
+    fecha_hora_entrega: ahora,
+    fecha_hora_devolucion: null,
+    duracion: '',
+    se_reclamo_a_tiempo: seReclamoATiempo,
+    tiempo_retraso: tiempoRetraso,
+    retraso_entrega: !seReclamoATiempo,
+    tiempo_retraso_devolucion: '',
+    tipo_entrega: 'manual',
+    origen_registro: origenRegistro,
+    ubicacion_prestamo: ubicacionPrestamo,
+    ubicacion_devolucion: '',
+    quien_reclama: 'docente',
+    numero_documento_reclama: documento,
+    nombre_reclama: infoClase?.profesor || '',
+    quien_entrega: '',
+    numero_documento_entrega: '',
+    nombre_entrega: '',
+    estado: 'en_prestamo',
+  };
+}
+
+function construirDatosDevolucion({
+  registro,
+  entregaInfo = {},
+  ubicacionPorDefecto = '',
+}) {
+  const ahora = new Date();
+  const fechaEntrega = registro?.fecha_hora_entrega instanceof Date
+    ? registro.fecha_hora_entrega
+    : (registro?.fecha_hora_entrega ? new Date(registro.fecha_hora_entrega) : null);
+  const fechaStr = fechaEntrega && !Number.isNaN(fechaEntrega.getTime())
+    ? fechaEntrega.toISOString().split('T')[0]
+    : getFechaHoy();
+
+  return {
+    mensaje: `Llave devuelta por ${entregaInfo.nombre || registro?.docente}`,
+    updates: {
+      fecha_hora_devolucion: ahora,
+      duracion: calcularDuracion(registro?.fecha_hora_entrega, ahora),
+      tiempo_retraso_devolucion: calcularRetrasoDevolucion(registro?.horario, fechaStr, ahora),
+      retraso_entrega: !!calcularRetrasoDevolucion(registro?.horario, fechaStr, ahora),
+      estado: 'entregado',
+      ubicacion_devolucion: entregaInfo.ubicacion || ubicacionPorDefecto,
+      quien_entrega: entregaInfo.quien || 'docente',
+      numero_documento_entrega: entregaInfo.documento || registro?.numero_documento,
+      nombre_entrega: entregaInfo.nombre || registro?.docente,
+    },
+  };
+}
+
 function calcularEstadoVisual(registro, limiteHorasDemora = 4) {
   if (registro?.fecha_hora_devolucion) {
     return 'entregado';
@@ -186,6 +379,15 @@ module.exports = {
   horarioCubiertoPorPrestamo,
   agruparClasesConsecutivas,
   encontrarClaseActual,
+  construirClasesProcesadas,
+  construirResultadoError,
+  construirResultadoSinClase,
+  construirResultadoAnticipado,
+  construirResultadoPrestamo,
+  construirResultadoDevolucion,
+  construirRegistroPrestamo,
+  construirRegistroEntregaManual,
+  construirDatosDevolucion,
   calcularEstadoVisual,
   toClientFormat,
 };
