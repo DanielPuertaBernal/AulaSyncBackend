@@ -38,12 +38,35 @@ class PrestamoRepository {
     return Prestamo.findByIdAndUpdate(id, { $set: updates }, { new: true, session }).lean();
   }
 
-  async addEquipo(id, equipoDetalle) {
+  async addEquipo(id, equipoDetalle, session = null) {
     return Prestamo.findByIdAndUpdate(
       id,
       { $push: { equipos: equipoDetalle } },
-      { new: true }
+      { new: true, session }
     ).lean();
+  }
+
+  async findEquiposPrestados(equiposIds = [], session = null) {
+    if (!equiposIds.length) return [];
+
+    const objectIds = equiposIds.map((id) => new mongoose.Types.ObjectId(id));
+    const query = Prestamo.find(
+      {
+        estado: { $in: ['activo', 'parcialmente_devuelto'] },
+        equipos: {
+          $elemMatch: {
+            equipo_id: { $in: objectIds },
+            estado_equipo: 'entregado',
+          },
+        },
+      },
+      {
+        equipos: 1,
+      }
+    ).lean();
+
+    if (session) query.session(session);
+    return query;
   }
 
   async verificarEquipoPrestado(equipoId, session = null) {

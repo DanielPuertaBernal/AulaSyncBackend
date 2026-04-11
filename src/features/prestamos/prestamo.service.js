@@ -41,32 +41,17 @@ class PrestamoService {
     );
 
     const equiposIds = this._normalizarEquipos(equipos);
-
     const session = await mongoose.startSession();
+
     try {
       session.startTransaction();
 
-      await this._validarDisponibilidad(equiposIds, session);
-
-      const detalles = await Promise.all(
-        equiposIds.map(async (id) => {
-          const equipo = await equipoRepository.findById(id);
-          if (!equipo) throw ApiError.notFound(`Equipo ${id} no encontrado`);
-          return {
-            equipo_id: new mongoose.Types.ObjectId(id),
-            equipo_nombre: equipo.nombre,
-            equipo_marca: equipo.marca,
-            equipo_codigo: equipo.codigo_inventario,
-            equipo_consecutivo: equipo.consecutivo,
-            equipo_codigo_barras: equipo.codigo_barras,
-            estado_equipo: 'entregado',
-            fecha_entrega: new Date(),
-            tipo_entrega: 'manual',
-          };
-        })
-      );
-
+      const equiposMap = await this._cargarEquiposDisponibles(equiposIds, session);
       const prestamoAbierto = await prestamoRepository.findActivoByDocente(docente_codigo_nfc, session);
+      this._validarNoDuplicadosEnPrestamo(prestamoAbierto, equiposIds, equiposMap);
+
+      const detalles = equiposIds.map((id) => this._crearDetalleEquipo(equiposMap.get(String(id))));
+
       let prestamo;
       if (prestamoAbierto) {
         prestamo = await prestamoRepository.update(
@@ -104,28 +89,32 @@ class PrestamoService {
    * Agrega un equipo adicional a un préstamo existente
    */
   async agregarEquipo(prestamoId, equipoId, auxiliar) {
-    const prestamo = await this.obtener(prestamoId);
-    if (prestamo.estado === 'completamente_devuelto') {
-      throw ApiError.badRequest('El préstamo ya fue devuelto completamente');
+    const session = await mongoose.startSession();
+
+    try {
+      session.startTransaction();
+
+      const prestamo = await prestamoRepository.findById(prestamoId, session);
+      if (!prestamo) throw ApiError.notFound('Préstamo no encontrado');
+      if (prestamo.estado === 'completamente_devuelto') {
+        throw ApiError.badRequest('El préstamo ya fue devuelto completamente');
+      }
+
+      const equiposMap = await this._cargarEquiposDisponibles([equipoId], session);
+      this._validarNoDuplicadosEnPrestamo(prestamo, [equipoId], equiposMap);
+
+      const equipo = equiposMap.get(String(equipoId));
+      const detalle = this._crearDetalleEquipo(equipo);
+      const updated = await prestamoRepository.addEquipo(prestamoId, detalle, session);
+
+      await session.commitTransaction();
+      return updated;
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
     }
-
-    await this._validarDisponibilidad([equipoId]);
-    const equipo = await equipoRepository.findById(equipoId);
-    if (!equipo) throw ApiError.notFound('Equipo no encontrado');
-
-    const detalle = {
-      equipo_id: new mongoose.Types.ObjectId(equipoId),
-      equipo_nombre: equipo.nombre,
-      equipo_marca: equipo.marca,
-      equipo_codigo: equipo.codigo_inventario,
-      equipo_consecutivo: equipo.consecutivo,
-      equipo_codigo_barras: equipo.codigo_barras,
-      estado_equipo: 'entregado',
-      fecha_entrega: new Date(),
-      tipo_entrega: 'manual',
-    };
-
-    return prestamoRepository.addEquipo(prestamoId, detalle);
   }
 
   /**
@@ -178,6 +167,10 @@ class PrestamoService {
       return eq;
     });
 
+    if (!equiposDevueltos.length) {
+      throw ApiError.badRequest('No hay equipos entregados que coincidan con la devolución solicitada');
+    }
+
     const aunEntregados = equiposActualizados.filter((e) => e.estado_equipo === 'entregado');
     const esCompleta = aunEntregados.length === 0;
     const nuevoEstado = esCompleta ? 'completamente_devuelto' : 'parcialmente_devuelto';
@@ -222,14 +215,84 @@ class PrestamoService {
     return [...new Set(normalizados)];
   }
 
-  async _validarDisponibilidad(equiposIds, session = null) {
-    for (const id of equiposIds) {
-      const prestado = await prestamoRepository.verificarEquipoPrestado(id, session);
-      if (prestado) {
-        const eq = await equipoRepository.findById(id);
-        throw ApiError.conflict(`El equipo '${eq?.nombre || id}' ya está prestado`);
+  _crearDetalleEquipo(equipo, tipoEntrega = 'manual') {
+    if (!equipo) throw ApiError.notFound('Equipo no encontrado');
+
+    return {
+      equipo_id: new mongoose.Types.ObjectId(equipo._id),
+      equipo_nombre: equipo.nombre,
+      equipo_marca: equipo.marca,
+      equipo_codigo: equipo.codigo_inventario,
+      equipo_consecutivo: equipo.consecutivo,
+      equipo_codigo_barras: equipo.codigo_barras,
+      estado_equipo: 'entregado',
+      fecha_entrega: new Date(),
+      tipo_entrega: tipoEntrega || 'manual',
+    };
+  }
+
+  async _cargarEquiposDisponibles(equiposIds, session = null) {
+    const equipos = await equipoRepository.findByIds(equiposIds, session);
+    const equiposMap = new Map(equipos.map((equipo) => [String(equipo._id), equipo]));
+
+    const faltantes = equiposIds.filter((id) => !equiposMap.has(String(id)));
+    if (faltantes.length) {
+      throw ApiError.notFound(`Equipos no encontrados: ${faltantes.join(', ')}`);
+    }
+
+    const noPrestables = equipos
+      .filter((equipo) => equipo.estado !== 'activo')
+      .map((equipo) => equipo.nombre || equipo.codigo_inventario || String(equipo._id));
+
+    if (noPrestables.length) {
+      throw ApiError.conflict(`Los equipos ${noPrestables.join(', ')} no están disponibles para préstamo`);
+    }
+
+    await this._validarDisponibilidad(equiposIds, session, equiposMap);
+    return equiposMap;
+  }
+
+  async _validarDisponibilidad(equiposIds, session = null, equiposMap = null) {
+    const prestamosActivos = await prestamoRepository.findEquiposPrestados(equiposIds, session);
+    const idsPrestados = new Set();
+
+    for (const prestamo of prestamosActivos) {
+      for (const equipo of prestamo.equipos || []) {
+        const equipoId = String(equipo.equipo_id);
+        if (equipo.estado_equipo === 'entregado' && equiposIds.includes(equipoId)) {
+          idsPrestados.add(equipoId);
+        }
       }
     }
+
+    if (!idsPrestados.size) return;
+
+    const nombres = [...idsPrestados].map((id) => {
+      const equipo = equiposMap?.get(id);
+      return equipo?.nombre || equipo?.codigo_inventario || id;
+    });
+
+    throw ApiError.conflict(`Los equipos ${nombres.join(', ')} ya están prestados`);
+  }
+
+  _validarNoDuplicadosEnPrestamo(prestamo, equiposIds, equiposMap = null) {
+    if (!prestamo?.equipos?.length) return;
+
+    const equiposActivos = new Set(
+      prestamo.equipos
+        .filter((equipo) => equipo.estado_equipo === 'entregado')
+        .map((equipo) => String(equipo.equipo_id))
+    );
+
+    const duplicados = equiposIds.filter((id) => equiposActivos.has(String(id)));
+    if (!duplicados.length) return;
+
+    const nombres = duplicados.map((id) => {
+      const equipo = equiposMap?.get(String(id));
+      return equipo?.nombre || equipo?.codigo_inventario || id;
+    });
+
+    throw ApiError.conflict(`El préstamo ya incluye los equipos: ${nombres.join(', ')}`);
   }
 
   async _validarUbicacionOperacion(ubicacion, mensaje) {
