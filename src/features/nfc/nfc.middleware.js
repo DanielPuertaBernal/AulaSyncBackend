@@ -4,9 +4,13 @@ const crypto = require('crypto');
 
 function verifyNfcDeviceKey(req, res, next) {
   const deviceKey = String(req.headers['x-device-key'] || '');
-  const expectedKey = String(process.env.ESP32_DEVICE_KEY);
+  const expectedKey = process.env.ESP32_DEVICE_KEY;
 
-  if (!deviceKey || !expectedKey) {
+  if (!expectedKey) {
+    return res.status(503).json({ ok: false, message: 'ESP32_DEVICE_KEY no configurada en el servidor' });
+  }
+
+  if (!deviceKey) {
     return res.status(403).json({ ok: false, message: 'Device key inválido' });
   }
 

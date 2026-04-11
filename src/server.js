@@ -13,7 +13,7 @@ const nfcGateway = require('./shared/websocket/nfc.gateway');
 const PORT = process.env.PORT || 3001;
 const CLIENT_ORIGIN = process.env.CLIENT_URL || 'http://localhost:5173';
 
-const REQUIRED_ENV = ['MONGO_URI', 'MONGO_DB', 'JWT_SECRET', 'JWT_REFRESH_SECRET'];
+const REQUIRED_ENV = ['MONGO_URI', 'MONGO_DB', 'JWT_SECRET', 'JWT_REFRESH_SECRET', 'ESP32_DEVICE_KEY'];
 
 function validateEnv() {
   const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
