@@ -54,6 +54,7 @@ class LlaveService {
       resolverContextoNFC,
       buscarClaseParaConfirmacion,
       findPendienteByDocumento: (documento) => llaveRepository.findPendienteByDocumento(documento),
+      findByClientEventId: (clientEventId) => llaveRepository.findByClientEventId(clientEventId),
       findDocenteByDocumento: (documento) => docenteRepository.findByDocumento(documento),
       createRegistro: (registro) => llaveRepository.create(registro),
       normalizarUbicacionPrestamo,

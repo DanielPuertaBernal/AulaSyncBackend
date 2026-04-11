@@ -21,6 +21,8 @@ const entregarSchema = z.object({
   motivo: z.string().optional().default(''),
   ubicacion: ubicacionSchema.optional().default(UBICACIONES.OFICINA),
   origen: origenSchema.optional().default('individual'),
+  client_event_id: z.string().trim().min(1).max(120).optional(),
+  offline_created_at: z.string().datetime().optional(),
 });
 
 const procesarNFCSchema = z.object({

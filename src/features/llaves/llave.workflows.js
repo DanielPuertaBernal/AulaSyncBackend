@@ -21,6 +21,7 @@ function createLlaveWorkflows({
   resolverContextoNFC,
   buscarClaseParaConfirmacion,
   findPendienteByDocumento,
+  findByClientEventId,
   findDocenteByDocumento,
   createRegistro,
   normalizarUbicacionPrestamo,
@@ -187,6 +188,18 @@ function createLlaveWorkflows({
     const origenRegistro = normalizarOrigenRegistro(infoClase.origen);
     validarEntregaManual(infoClase);
 
+    const clientEventId = String(infoClase?.client_event_id || '').trim();
+    if (clientEventId) {
+      const existentePorEvento = await findByClientEventId(clientEventId);
+      if (existentePorEvento) {
+        return {
+          ok: true,
+          mensaje: `Entrega ya sincronizada para ${existentePorEvento.docente || infoClase.profesor}`,
+          registro: formatRegistro(existentePorEvento),
+        };
+      }
+    }
+
     const documento = normalizarDocumento(infoClase.nroidenti);
     const existing = await findPendienteByDocumento(documento);
     if (existing) {
@@ -198,6 +211,8 @@ function createLlaveWorkflows({
       documento,
       ubicacionPrestamo,
       origenRegistro,
+      clientEventId,
+      offlineCreatedAt: infoClase?.offline_created_at,
     });
 
     const created = await createRegistro(registro);

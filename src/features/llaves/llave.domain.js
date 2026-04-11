@@ -245,18 +245,23 @@ function construirRegistroEntregaManual({
   documento,
   ubicacionPrestamo,
   origenRegistro,
+  clientEventId = '',
+  offlineCreatedAt = null,
 }) {
-  const ahora = new Date();
+  const fechaOffline = offlineCreatedAt ? new Date(offlineCreatedAt) : null;
+  const ahora = fechaOffline && !Number.isNaN(fechaOffline.getTime()) ? fechaOffline : new Date();
   const horario = (infoClase?.hora_inicio && infoClase?.hora_fin)
     ? `${infoClase.hora_inicio} A ${infoClase.hora_fin}`
     : '';
   const tiempoRetraso = horario ? calcularTiempoRetraso(horario, ahora) : '';
   const seReclamoATiempo = horario ? !tiempoRetraso : true;
+  const diaRegistro = infoClase?.dia
+    || ahora.toLocaleDateString('es-CO', { weekday: 'long' }).replace(/^./, (char) => char.toUpperCase());
 
   return {
     numero_documento: documento,
     docente: infoClase?.profesor || '',
-    dia: getDiaActual(),
+    dia: diaRegistro || getDiaActual(),
     horario,
     aula: infoClase?.aula || '',
     facultad: infoClase?.facultad || 'No especificada',
@@ -272,6 +277,9 @@ function construirRegistroEntregaManual({
     origen_registro: origenRegistro,
     ubicacion_prestamo: ubicacionPrestamo,
     ubicacion_devolucion: '',
+    client_event_id: clientEventId || undefined,
+    fecha_registro_offline: offlineCreatedAt ? ahora : null,
+    sincronizado_desde_offline: Boolean(offlineCreatedAt),
     quien_reclama: 'docente',
     numero_documento_reclama: documento,
     nombre_reclama: infoClase?.profesor || '',
