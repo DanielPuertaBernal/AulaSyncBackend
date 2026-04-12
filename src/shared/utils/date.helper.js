@@ -23,15 +23,6 @@ function getFechaHoy() {
 }
 
 /**
- * Retorna la hora actual en formato HH:MM:SS
- * @returns {string}
- */
-function getHoraActual() {
-  const now = new Date();
-  return now.toTimeString().split(' ')[0];
-}
-
-/**
  * Parsea una hora en formato "HH:MM" o "HH:MM:SS" y retorna objeto {hours, minutes}
  * @param {string} horaStr
  * @returns {{hours: number, minutes: number} | null}
@@ -55,38 +46,6 @@ function horaAMinutos(horaStr) {
   const parsed = parseHora(horaStr);
   if (!parsed) return null;
   return parsed.hours * 60 + parsed.minutes;
-}
-
-/**
- * Evalúa si la entrega de llave fue dentro de la hora de inicio de clase
- * "Se reclamó a tiempo" = entregaron la llave antes o máximo 10 minutos DESPUÉS del inicio
- * @param {string} horario  Ej: "07:00 A 09:00"
- * @param {Date} ahora
- * @returns {{ seTiempo: boolean, retraso: string }}
- */
-function evaluarReclamoTiempo(horario, ahora = new Date()) {
-  try {
-    if (!horario) return { seTiempo: false, retraso: '' };
-
-    const partes = String(horario).toUpperCase().split(' A ');
-    if (partes.length < 1) return { seTiempo: false, retraso: '' };
-
-    const horaInicio = horaAMinutos(partes[0].trim());
-    if (horaInicio === null) return { seTiempo: false, retraso: '' };
-
-    const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
-    const diffMinutos = minutosAhora - horaInicio;
-
-    // Si entregó antes o hasta 10 minutos después se considera "a tiempo"
-    const seTiempo = diffMinutos <= 10;
-    const retraso = diffMinutos > 0
-      ? `${Math.floor(diffMinutos / 60)}h ${diffMinutos % 60}min`
-      : '';
-
-    return { seTiempo, retraso };
-  } catch {
-    return { seTiempo: false, retraso: '' };
-  }
 }
 
 /**
@@ -219,10 +178,7 @@ function calcularTiempoRetraso(horario, ahora = new Date()) {
 module.exports = {
   getDiaActual,
   getFechaHoy,
-  getHoraActual,
-  parseHora,
   horaAMinutos,
-  evaluarReclamoTiempo,
   calcularRetrasoDevolucion,
   calcularDuracion,
   calcularDuracionClase,

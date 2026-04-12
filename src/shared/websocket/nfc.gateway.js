@@ -1,8 +1,8 @@
 'use strict';
 /**
  * NFC Gateway - WebSocket + SerialPort
- * Equivale a infrastructure/services/nfc_service.py + pyserial
- * Emite eventos NFC en tiempo real al frontend via Socket.io
+ * Sistema de intención NFC con cola de espera FIFO.
+ * Solo el cliente con intención activa recibe eventos NFC.
  */
 const { EventEmitter } = require('events');
 const jwt = require('jsonwebtoken');
@@ -15,6 +15,7 @@ const {
 const DEBOUNCE_MS = parseInt(process.env.NFC_DEBOUNCE_MS || '2000', 10);
 const JWT_ISSUER = process.env.JWT_ISSUER || 'aulasync-api';
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'aulasync-clients';
+const INTENCION_TTL_MS = 60_000;
 
 class NFCGateway extends EventEmitter {
   constructor() {
@@ -27,27 +28,33 @@ class NFCGateway extends EventEmitter {
     this._active = false;
     this._desiredActive = false;
     this._opening = false;
-    this._modo = NFC_MODOS.AUTO;
     this._lastError = '';
     this._reconnectTimer = null;
     this._portPath = process.env.NFC_PORT || '/dev/ttyUSB0';
     this._baudRate = parseInt(process.env.NFC_BAUD_RATE || '9600', 10);
+
+    // Sistema de intención NFC
+    this._intencionActiva = null; // { socketId, modo, userId, expiresAt, timer }
+    this._colaEspera = [];        // [{ socketId, modo, userId }]
   }
 
-  get modo() {
-    return this._modo;
+  getModoActivo() {
+    return this._intencionActiva?.modo || NFC_MODOS.AUTO;
   }
 
   obtenerEstado() {
     return {
       activo: this._active,
       escuchando: this._desiredActive,
-      modo: this._modo,
+      modo: this.getModoActivo(),
       puerto: this._portPath,
       puertoAbierto: Boolean(this._port?.isOpen),
       ultimoCodigo: this._lastRead || null,
       ultimaLectura: this._lastReadAt,
       ultimoError: this._lastError || null,
+      lectorOcupado: this._intencionActiva !== null,
+      expiraEn: this._intencionActiva ? Math.max(0, this._intencionActiva.expiresAt - Date.now()) : null,
+      enCola: this._colaEspera.length,
     };
   }
 
@@ -88,6 +95,154 @@ class NFCGateway extends EventEmitter {
     this._emitStatus('Intentando reconectar lector NFC...');
   }
 
+  // ─── Sistema de intención NFC ───
+
+  _programarExpiracion(socketId) {
+    if (!this._intencionActiva || this._intencionActiva.socketId !== socketId) return;
+    if (this._intencionActiva.timer) clearTimeout(this._intencionActiva.timer);
+
+    this._intencionActiva.expiresAt = Date.now() + INTENCION_TTL_MS;
+    this._intencionActiva.timer = setTimeout(() => {
+      if (this._intencionActiva?.socketId === socketId) {
+        const sock = this._io?.of('/nfc').sockets.get(socketId);
+        if (sock) sock.emit('nfc:intencion_expirada');
+        console.log(`⏰ Intención NFC expirada: ${socketId}`);
+        this._liberarIntencion();
+      }
+    }, INTENCION_TTL_MS);
+  }
+
+  _renovarIntencion(socketId) {
+    if (!this._intencionActiva || this._intencionActiva.socketId !== socketId) return;
+    this._programarExpiracion(socketId);
+  }
+
+  _liberarIntencion() {
+    if (this._intencionActiva?.timer) {
+      clearTimeout(this._intencionActiva.timer);
+    }
+    this._intencionActiva = null;
+
+    // Promover siguiente en cola
+    if (this._colaEspera.length > 0) {
+      const siguiente = this._colaEspera.shift();
+      this._intencionActiva = { ...siguiente, expiresAt: 0, timer: null };
+      this._programarExpiracion(siguiente.socketId);
+
+      const sock = this._io?.of('/nfc').sockets.get(siguiente.socketId);
+      if (sock) {
+        sock.emit('nfc:intencion_confirmada', { modo: siguiente.modo });
+      }
+
+      // Actualizar posiciones de los restantes en cola
+      this._emitPosicionesCola();
+      this._emitStatus(`Lector NFC asignado (modo: ${siguiente.modo})`);
+    } else {
+      // Nadie en cola → lector libre
+      if (this._io) {
+        this._io.of('/nfc').emit('nfc:lector_libre');
+      }
+      this._emitStatus('Lector NFC disponible');
+    }
+  }
+
+  _emitPosicionesCola() {
+    this._colaEspera.forEach((entry, idx) => {
+      const sock = this._io?.of('/nfc').sockets.get(entry.socketId);
+      if (sock) {
+        sock.emit('nfc:posicion_cola', {
+          posicion: idx + 1,
+          expiraEn: this._intencionActiva
+            ? Math.max(0, this._intencionActiva.expiresAt - Date.now())
+            : null,
+        });
+      }
+    });
+  }
+
+  _registrarIntencion(socket, { modo }) {
+    if (!NFC_MODOS_PERMITIDOS.includes(modo)) return;
+
+    const socketId = socket.id;
+    const userId = socket.data.user?.id || socket.data.user?.sub;
+
+    // Si ya tiene la intención activa → renovar TTL
+    if (this._intencionActiva?.socketId === socketId) {
+      this._intencionActiva.modo = modo;
+      this._renovarIntencion(socketId);
+      socket.emit('nfc:intencion_confirmada', { modo });
+      return;
+    }
+
+    // Si ya está en cola → actualizar modo e ignorar
+    const enCola = this._colaEspera.find((e) => e.socketId === socketId);
+    if (enCola) {
+      enCola.modo = modo;
+      return;
+    }
+
+    // Mismo userId en otro tab → reemplazar
+    if (this._intencionActiva && userId && this._intencionActiva.userId === userId) {
+      const prevSocket = this._io?.of('/nfc').sockets.get(this._intencionActiva.socketId);
+      if (prevSocket) prevSocket.emit('nfc:intencion_reemplazada');
+      if (this._intencionActiva.timer) clearTimeout(this._intencionActiva.timer);
+
+      this._intencionActiva = { socketId, modo, userId, expiresAt: 0, timer: null };
+      this._programarExpiracion(socketId);
+      socket.emit('nfc:intencion_confirmada', { modo });
+      this._emitStatus(`Lector NFC asignado (modo: ${modo})`);
+      return;
+    }
+
+    // No hay intención activa → asignar directamente
+    if (!this._intencionActiva) {
+      this._intencionActiva = { socketId, modo, userId, expiresAt: 0, timer: null };
+      this._programarExpiracion(socketId);
+      socket.emit('nfc:intencion_confirmada', { modo });
+      this._emitStatus(`Lector NFC asignado (modo: ${modo})`);
+      return;
+    }
+
+    // Hay intención activa de otro usuario → encolar
+    this._colaEspera.push({ socketId, modo, userId });
+    socket.emit('nfc:en_cola', {
+      posicion: this._colaEspera.length,
+      expiraEn: Math.max(0, this._intencionActiva.expiresAt - Date.now()),
+    });
+  }
+
+  _cancelarIntencion(socket) {
+    const socketId = socket.id;
+
+    if (this._intencionActiva?.socketId === socketId) {
+      this._liberarIntencion();
+      return;
+    }
+
+    const idx = this._colaEspera.findIndex((e) => e.socketId === socketId);
+    if (idx !== -1) {
+      this._colaEspera.splice(idx, 1);
+      this._emitPosicionesCola();
+    }
+  }
+
+  _handleDisconnect(socket) {
+    const socketId = socket.id;
+
+    if (this._intencionActiva?.socketId === socketId) {
+      this._liberarIntencion();
+      return;
+    }
+
+    const idx = this._colaEspera.findIndex((e) => e.socketId === socketId);
+    if (idx !== -1) {
+      this._colaEspera.splice(idx, 1);
+      this._emitPosicionesCola();
+    }
+  }
+
+  // ─── Socket handlers ───
+
   _registerSocketHandlers() {
     const nsp = this._io.of('/nfc');
 
@@ -127,18 +282,15 @@ class NFCGateway extends EventEmitter {
 
       socket.on('nfc:start', () => this._startListening(nsp));
       socket.on('nfc:stop', () => this._stopListening(nsp));
-      socket.on('nfc:set_modo', ({ modo }) => {
-        if (NFC_MODOS_PERMITIDOS.includes(modo)) {
-          this._modo = modo;
-          nsp.emit('nfc:modo', { modo });
-          this._emitStatus(`Modo NFC actualizado: ${modo}`);
-        }
-      });
-      socket.on('nfc:simulate', ({ codigo }) => {
-        if (codigo) this.simularLectura(codigo);
-      });
+
+      // Intención NFC
+      socket.on('nfc:registrar_intencion', (data) => this._registrarIntencion(socket, data || {}));
+      socket.on('nfc:cancelar_intencion', () => this._cancelarIntencion(socket));
+      socket.on('nfc:renovar_intencion', () => this._renovarIntencion(socket.id));
+
       socket.on('disconnect', () => {
         console.log(`🔌 Cliente NFC desconectado: ${socket.id}`);
+        this._handleDisconnect(socket);
       });
     });
   }
@@ -286,31 +438,37 @@ class NFCGateway extends EventEmitter {
   }
 
   /**
-   * Simula una lectura NFC (para testing sin hardware)
-   * @param {string} codigo
-   */
-  simularLectura(codigo) {
-    this._handleNFCRead(codigo);
-  }
-
-  /**
-   * Emite resultado de lectura procesada al frontend (usado por NFC HTTP endpoint)
-   * @param {object} data
+   * Emite resultado de lectura procesada al frontend.
+   * Si hay intención activa, solo al socket dueño y luego libera.
+   * Si no hay intención, broadcast normal (retrocompatibilidad).
    */
   emitirLectura(data) {
     if (this._io) {
-      this._io.of('/nfc').emit('nfc:resultado', data);
+      if (this._intencionActiva) {
+        const sock = this._io.of('/nfc').sockets.get(this._intencionActiva.socketId);
+        if (sock) sock.emit('nfc:resultado', data);
+        this._liberarIntencion();
+      } else {
+        this._io.of('/nfc').emit('nfc:resultado', data);
+      }
     }
     this.emit('resultado', data);
   }
 
   emitirCarnetLeido(idCarnet, ubicacion = UBICACIONES.OFICINA) {
     if (this._io) {
-      this._io.of('/nfc').emit('nfc:carnet_leido', {
+      const payload = {
         id_carnet: idCarnet,
         ubicacion,
         timestamp: new Date().toISOString(),
-      });
+      };
+      if (this._intencionActiva) {
+        const sock = this._io.of('/nfc').sockets.get(this._intencionActiva.socketId);
+        if (sock) sock.emit('nfc:carnet_leido', payload);
+        this._liberarIntencion();
+      } else {
+        this._io.of('/nfc').emit('nfc:carnet_leido', payload);
+      }
     }
   }
 }

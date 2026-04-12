@@ -34,7 +34,7 @@ class NFCService {
       }
     }
     // Modo identificacion: solo emitir carnet sin procesar programación
-    if (nfcGateway.modo === NFC_MODOS.IDENTIFICACION) {
+    if (nfcGateway.getModoActivo() === NFC_MODOS.IDENTIFICACION) {
       try {
         const ubicacionValidada = await ubicacionService.validarOperacion(ubicacion, OPERACIONES_UBICACION.IDENTIFICACION);
         nfcGateway.emitirCarnetLeido(idCarnet, ubicacionValidada);

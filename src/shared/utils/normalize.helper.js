@@ -8,10 +8,6 @@ function normalizeUpperString(value = '') {
   return normalizeString(value).toUpperCase();
 }
 
-function normalizeLowerString(value = '') {
-  return normalizeString(value).toLowerCase();
-}
-
 function removeDiacritics(value = '') {
   return normalizeString(value)
     .normalize('NFD')
@@ -43,7 +39,6 @@ function normalizeKey(value = '') {
 module.exports = {
   normalizeString,
   normalizeUpperString,
-  normalizeLowerString,
   removeDiacritics,
   normalizeLookupKey,
   normalizeDocumento,

@@ -85,8 +85,6 @@ class EquipoService {
     if (!deleted) throw ApiError.notFound('Equipo no encontrado');
     return { ok: true };
   }
-
-  estaDisponible(equipo) { return equipo.estado === 'activo'; }
 }
 
 module.exports = new EquipoService();

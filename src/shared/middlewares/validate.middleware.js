@@ -22,22 +22,4 @@ function validate(schema) {
   };
 }
 
-/**
- * Valida req.query
- */
-function validateQuery(schema) {
-  return (req, res, next) => {
-    const result = schema.safeParse(req.query);
-    if (!result.success) {
-      const errors = result.error.errors.map((e) => ({
-        campo: e.path.join('.'),
-        mensaje: e.message,
-      }));
-      return res.status(400).json({ ok: false, message: 'Query inválida', errors });
-    }
-    req.query = result.data;
-    next();
-  };
-}
-
-module.exports = { validate, validateQuery };
+module.exports = { validate };
