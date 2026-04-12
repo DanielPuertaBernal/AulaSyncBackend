@@ -18,6 +18,7 @@ const llaveSchema = new mongoose.Schema(
     retraso_entrega: { type: Boolean, default: false },
     tiempo_retraso_devolucion: { type: String, default: '' },
     tipo_entrega: { type: String, enum: ['manual', 'carnet', ''], default: '' },
+    tipo_devolucion: { type: String, enum: ['manual', 'carnet', ''], default: '' },
     origen_registro: { type: String, enum: ['individual', 'programacion', ''], default: '' },
     ubicacion_prestamo: { type: String, default: '' },
     ubicacion_devolucion: { type: String, default: '' },

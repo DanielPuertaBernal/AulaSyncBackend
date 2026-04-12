@@ -34,6 +34,7 @@ function createLlaveWorkflows({
     try {
       const ubicacionDevolucion = await normalizarUbicacionDevolucion(ubicacion);
       const result = await persistirDevolucion(contexto.prestamoActivo, {
+        canal: 'carnet',
         quien: contexto.rol,
         documento,
         nombre: persona.nombre,
@@ -216,7 +217,10 @@ function createLlaveWorkflows({
     }
 
     const ubicacionDevolucion = await normalizarUbicacionDevolucion(ubicacion);
-    const result = await persistirDevolucion(registro, { ubicacion: ubicacionDevolucion });
+    const result = await persistirDevolucion(registro, {
+      canal: 'manual',
+      ubicacion: ubicacionDevolucion,
+    });
     return { ok: true, ...result };
   }
 

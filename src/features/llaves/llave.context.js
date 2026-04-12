@@ -24,6 +24,13 @@ async function buscarPersonaPorCarnet(idCarnet) {
 }
 
 async function resolverContextoNFC(persona, documento) {
+  // Priorizar devolución: si el documento escaneado ya tiene llave en préstamo,
+  // debe permitirse devolver incluso sin clases en programación.
+  const prestamoActivo = await llaveRepository.findPendienteByDocumento(documento);
+  if (prestamoActivo) {
+    return { rol: 'docente', docente: persona, prestamoActivo, clasesDisponibles: [] };
+  }
+
   const diaActual = getDiaActual();
   const [todasClases, registrosHoy] = await Promise.all([
     programacionRepository.findByDia(diaActual),
