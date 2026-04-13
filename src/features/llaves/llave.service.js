@@ -79,7 +79,29 @@ class LlaveService {
 
   async obtenerPendientes() {
     const raw = await llaveRepository.findPendientes();
-    return formatearPendientes(raw, formatRegistroLlave);
+    const pendientes = await formatearPendientes(raw, formatRegistroLlave);
+
+    // Enrich with docente email
+    const documentos = [...new Set(pendientes.map((p) => p.documento).filter(Boolean))];
+    const correoMap = new Map();
+    for (const doc of documentos) {
+      const docente = await docenteRepository.findByDocumento(doc);
+      if (docente?.correo) correoMap.set(doc, docente.correo);
+    }
+    return pendientes.map((p) => ({ ...p, correo: correoMap.get(p.documento) || '' }));
+  }
+
+  async obtenerTodosPendientes() {
+    const raw = await llaveRepository.findPendientes();
+    const todos = raw.map((r) => formatRegistroLlave(r));
+
+    const documentos = [...new Set(todos.map((p) => p.documento).filter(Boolean))];
+    const correoMap = new Map();
+    for (const doc of documentos) {
+      const docente = await docenteRepository.findByDocumento(doc);
+      if (docente?.correo) correoMap.set(doc, docente.correo);
+    }
+    return todos.map((p) => ({ ...p, correo: correoMap.get(p.documento) || '' }));
   }
 
   async obtenerPendientesHoy() {

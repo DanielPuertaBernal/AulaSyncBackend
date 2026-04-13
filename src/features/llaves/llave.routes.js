@@ -39,6 +39,7 @@ const confirmarAnticipadoSchema = z.object({
 });
 
 router.get('/pendientes', ...requireAuth, (req, res) => llaveController.pendientes(req, res));
+router.get('/pendientes/todos', ...requireAuth, (req, res) => llaveController.todosPendientes(req, res));
 router.get('/dia', ...requireAuth, (req, res) => llaveController.pendientesHoy(req, res));
 router.get('/historial', ...requireAuth, (req, res) => llaveController.historial(req, res));
 router.get('/historial/exportar', ...requireAuth, (req, res) => llaveController.exportarHistorial(req, res));

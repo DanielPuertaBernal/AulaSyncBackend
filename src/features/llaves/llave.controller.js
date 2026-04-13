@@ -13,6 +13,11 @@ class LlaveController {
     return res.json({ ok: true, data: { llaves } });
   }
 
+  async todosPendientes(req, res) {
+    const llaves = await llaveService.obtenerTodosPendientes();
+    return res.json({ ok: true, data: { llaves } });
+  }
+
   async historial(req, res) {
     const { fecha, documento, estado, page, limit } = req.query;
     const pagination = parsePagination({ page, limit });
