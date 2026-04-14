@@ -1,5 +1,7 @@
 'use strict';
 const { Resend } = require('resend');
+const { createLogger } = require('../utils/logger');
+const log = createLogger('Email');
 
 const EMAIL_FROM = process.env.EMAIL_FROM;
 
@@ -23,7 +25,7 @@ async function sendEmail({ to, subject, html }) {
   });
 
   if (error) {
-    console.error('[EMAIL] Error enviando correo:', error);
+    log.error('Error enviando correo', error);
     throw new Error(error.message || 'Error al enviar correo');
   }
 
@@ -38,7 +40,7 @@ async function sendBulkEmails(emails) {
       const data = await sendEmail(email);
       results.push({ to: email.to, estado: 'enviado', id: data?.id });
     } catch (err) {
-      console.error(`[EMAIL] Fallo envío a ${email.to}:`, err.message);
+      log.error(`Fallo envío a ${email.to}`, err);
       results.push({ to: email.to, estado: 'fallido', error: err.message });
     }
   }

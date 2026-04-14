@@ -2,18 +2,22 @@
 const { Comunidad } = require('./comunidad.schema');
 
 class ComunidadRepository {
+  /** @param {object} filtro @returns {Promise<object[]>} */
   async findAll(filtro = {}) {
     return Comunidad.find(filtro).lean();
   }
 
+  /** @param {string} documento @returns {Promise<object|null>} */
   async findByDocumento(documento) {
     return Comunidad.findOne({ numero_documento: String(documento) }).lean();
   }
 
+  /** @param {string} idCarnet @returns {Promise<object|null>} */
   async findByCarnet(idCarnet) {
     return Comunidad.findOne({ id_carnet: String(idCarnet) }).lean();
   }
 
+  /** @param {string} query - Término de búsqueda @param {object} filtro @returns {Promise<object[]>} */
   async search(query, filtro = {}) {
     const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(escaped, 'i');
@@ -26,6 +30,7 @@ class ComunidadRepository {
     }).lean();
   }
 
+  /** @param {object} data @returns {Promise<object>} Persona insertada o actualizada */
   async upsertOne(data) {
     return Comunidad.findOneAndUpdate(
       { numero_documento: data.numero_documento },
@@ -34,6 +39,7 @@ class ComunidadRepository {
     );
   }
 
+  /** @param {object[]} registros @returns {Promise<{insertados: number, actualizados: number}>} */
   async upsertMany(registros) {
     const ops = registros.map((r) => ({
       updateOne: {

@@ -2,18 +2,22 @@
 const prestamoService = require('./prestamo.service');
 
 class PrestamoController {
+  /** GET /api/prestamos */
   async listar(req, res) {
     const prestamos = await prestamoService.listar();
     return res.json({ ok: true, data: { prestamos } });
   }
+  /** GET /api/prestamos/activos */
   async activos(req, res) {
     const prestamos = await prestamoService.activos();
     return res.json({ ok: true, data: { prestamos } });
   }
+  /** GET /api/prestamos/docente/:nfc */
   async porDocente(req, res) {
     const prestamos = await prestamoService.porDocente(req.params.nfc);
     return res.json({ ok: true, data: { prestamos } });
   }
+  /** POST /api/prestamos */
   async crear(req, res) {
     const prestamo = await prestamoService.crear({
       ...req.body,
@@ -21,11 +25,13 @@ class PrestamoController {
     });
     return res.status(201).json({ ok: true, message: 'Préstamo creado', data: { prestamo } });
   }
+  /** PATCH /api/prestamos/:id/equipo */
   async agregarEquipo(req, res) {
     const { equipoId } = req.body;
     const prestamo = await prestamoService.agregarEquipo(req.params.id, equipoId, req.user.nombre);
     return res.json({ ok: true, message: 'Equipo agregado al préstamo', data: { prestamo } });
   }
+  /** POST /api/prestamos/devolucion */
   async devolucion(req, res) {
     const result = await prestamoService.registrarDevolucion({
       ...req.body,

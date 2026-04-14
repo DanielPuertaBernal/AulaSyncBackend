@@ -6,6 +6,9 @@ const cors = require('cors');
 const helmet = require('helmet');
 
 const errorHandler = require('./shared/middlewares/error.handler');
+const requestLogger = require('./shared/middlewares/request.logger');
+const swaggerUi = require('swagger-ui-express');
+const { swaggerSpec } = require('./shared/swagger/swagger.config');
 
 // Feature routes
 const authRoutes = require('./features/auth/auth.routes');
@@ -32,9 +35,14 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(requestLogger);
 
 // ── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, timestamp: new Date().toISOString() }));
+
+// ── Swagger / OpenAPI Docs ───────────────────────────────────────────────────
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { explorer: true }));
+app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);

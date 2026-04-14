@@ -17,6 +17,7 @@ const {
 
 const normalizarDocumento = normalizeDocumento;
 
+/** Verifica si una asignación de monitor coincide con una clase (por materia y opcionalmente horario). */
 function matchMonitorClase(asignacion, clase) {
   const materiaMatch = normalizeString(asignacion?.materia).toLowerCase() ===
     normalizeString(clase?.materia).toLowerCase();
@@ -29,6 +30,7 @@ function matchMonitorClase(asignacion, clase) {
   return true;
 }
 
+/** Determina si un horario de clase ya fue cubierto por algún préstamo registrado hoy. */
 function horarioCubiertoPorPrestamo(horarioClase, horariosProcesados) {
   const partes = normalizeHorario(horarioClase).split(' A ');
   const claseInicio = horaAMinutos(partes[0]?.trim());
@@ -44,6 +46,12 @@ function horarioCubiertoPorPrestamo(horarioClase, horariosProcesados) {
   });
 }
 
+/**
+ * Agrupa clases consecutivas del mismo docente/aula en un solo bloque horario.
+ * Ejemplo: 7:00-8:00 + 8:00-9:00 → 7:00-9:00
+ * @param {Array} clases - Clases del día a agrupar
+ * @returns {Array} Clases con horarios consolidados
+ */
 function agruparClasesConsecutivas(clases = []) {
   const grupos = new Map();
 
@@ -100,6 +108,7 @@ function agruparClasesConsecutivas(clases = []) {
   return resultado;
 }
 
+/** Encuentra la clase más cercana al horario actual que aún no ha terminado. */
 function encontrarClaseActual(clases = [], minutosAhora) {
   let mejorClase = null;
   let menorDiff = Number.POSITIVE_INFINITY;
@@ -202,6 +211,7 @@ function construirResultadoDevolucion({
   };
 }
 
+/** Construye el objeto de registro de préstamo con todos los campos requeridos por el schema. */
 function construirRegistroPrestamo({
   docente,
   clase,
@@ -241,6 +251,7 @@ function construirRegistroPrestamo({
   };
 }
 
+/** Construye registro de entrega manual con cálculo automático de retraso. */
 function construirRegistroEntregaManual({
   infoClase,
   documento,
@@ -286,6 +297,7 @@ function construirRegistroEntregaManual({
   };
 }
 
+/** Construye los datos de actualización para una devolución (duración, retraso, estado). */
 function construirDatosDevolucion({
   registro,
   entregaInfo = {},
@@ -316,6 +328,12 @@ function construirDatosDevolucion({
   };
 }
 
+/**
+ * Calcula el estado visual de un registro según su antigüedad.
+ * @param {Object} registro
+ * @param {number} limiteHorasDemora - Horas tras fin de clase para marcar como 'demora_entrega'
+ * @returns {'entregado'|'en_prestamo'|'demora_entrega'}
+ */
 function calcularEstadoVisual(registro, limiteHorasDemora = 4) {
   if (registro?.fecha_hora_devolucion) {
     return 'entregado';
@@ -342,6 +360,7 @@ function calcularEstadoVisual(registro, limiteHorasDemora = 4) {
   return new Date() > umbralDemora ? 'demora_entrega' : estadoActual;
 }
 
+/** Transforma un registro de BD al formato esperado por el frontend. */
 function toClientFormat(registro, limiteHorasDemora = 4) {
   const formatDate = (value) => (value instanceof Date ? value.toISOString().split('T')[0] : '');
   const formatTime = (value) => (value instanceof Date ? value.toTimeString().split(' ')[0] : '');

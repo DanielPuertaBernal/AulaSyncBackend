@@ -3,14 +3,17 @@ const { Notificacion } = require('./notificacion.schema');
 const { applyPagination } = require('../../shared/utils/pagination.helper');
 
 class NotificacionRepository {
+  /** @param {object} data @returns {Promise<object>} */
   async create(data) {
     return Notificacion.create(data);
   }
 
+  /** @param {object[]} docs @returns {Promise<object[]>} */
   async createMany(docs) {
     return Notificacion.insertMany(docs);
   }
 
+  /** @param {object} filters @param {object|null} pagination @returns {Promise<object>} */
   async findHistorial(filters = {}, pagination = null) {
     const query = {};
     if (filters.fecha) {

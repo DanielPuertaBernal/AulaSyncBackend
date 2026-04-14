@@ -28,9 +28,108 @@ const actualizarSchema = z.object({
   message: 'Debe enviar al menos un campo para actualizar',
 });
 
+/**
+ * @openapi
+ * /salones:
+ *   get:
+ *     tags: [Salones]
+ *     summary: Listar salones
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de salones
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     salones:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Salon'
+ */
 router.get('/', ...requireAuth, (req, res) => salonController.listar(req, res));
+
+/**
+ * @openapi
+ * /salones:
+ *   post:
+ *     tags: [Salones]
+ *     summary: Crear salón
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CrearSalonRequest'
+ *     responses:
+ *       201:
+ *         description: Salón creado
+ *       400:
+ *         description: Datos inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorValidacion'
+ */
 router.post('/', ...requireAdmin, validate(crearSchema), (req, res) => salonController.crear(req, res));
+
+/**
+ * @openapi
+ * /salones/{id}:
+ *   patch:
+ *     tags: [Salones]
+ *     summary: Actualizar salón
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CrearSalonRequest'
+ *     responses:
+ *       200:
+ *         description: Salón actualizado
+ *       404:
+ *         $ref: '#/components/schemas/ErrorNoEncontrado'
+ */
 router.patch('/:id', ...requireAdmin, validate(actualizarSchema), (req, res) => salonController.actualizar(req, res));
+
+/**
+ * @openapi
+ * /salones/{id}:
+ *   delete:
+ *     tags: [Salones]
+ *     summary: Eliminar salón
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Salón eliminado
+ *       404:
+ *         $ref: '#/components/schemas/ErrorNoEncontrado'
+ */
 router.delete('/:id', ...requireAdmin, (req, res) => salonController.eliminar(req, res));
 
 module.exports = router;

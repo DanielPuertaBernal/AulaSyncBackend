@@ -1,9 +1,7 @@
 'use strict';
-/**
- * MongoDB Client - Singleton Mongoose connection
- * Equivalente a infrastructure/services/mongo_client.py
- */
 const mongoose = require('mongoose');
+const { createLogger } = require('../utils/logger');
+const log = createLogger('MongoDB');
 
 class MongoClient {
   constructor() {
@@ -25,10 +23,10 @@ class MongoClient {
         dbName,
         serverSelectionTimeoutMS: 10000,
       });
-      console.log(`✅ MongoDB conectado → ${dbName}`);
+      log.info(`Conectado a ${dbName}`);
       return this._connection;
     } catch (err) {
-      console.error('❌ Error conectando a MongoDB:', err.message);
+      log.error('Error de conexión', err);
       throw err;
     }
   }
@@ -36,7 +34,7 @@ class MongoClient {
   async disconnect() {
     await mongoose.disconnect();
     this._connection = null;
-    console.log('🔌 MongoDB desconectado');
+    log.info('Desconectado');
   }
 
   getConnection() {

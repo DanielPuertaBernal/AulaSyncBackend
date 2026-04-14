@@ -9,10 +9,13 @@ const ApiError = require('../../shared/errors/api.error');
 const { prestamoRepository, devolucionRepository } = require('./prestamo.repository');
 const equipoRepository = require('../equipos/equipo.repository');
 const ubicacionService = require('../ubicaciones/ubicacion.service');
+const { createLogger } = require('../../shared/utils/logger');
 const {
   OPERACIONES_UBICACION,
   UBICACIONES: { OFICINA: UBICACION_OFICINA },
 } = require('../../shared/constants/nfc.constants');
+
+const logger = createLogger('Prestamos');
 
 class PrestamoService {
   async listar() { return prestamoRepository.findAll(); }
@@ -76,6 +79,7 @@ class PrestamoService {
       }
 
       await session.commitTransaction();
+      logger.info('Préstamo creado', { docente: docente_codigo_nfc, equipos: equiposIds.length, ubicacion: ubicacionPrestamo });
       return prestamo;
     } catch (err) {
       await session.abortTransaction();
@@ -108,6 +112,7 @@ class PrestamoService {
       const updated = await prestamoRepository.addEquipo(prestamoId, detalle, session);
 
       await session.commitTransaction();
+      logger.info('Equipo agregado a préstamo', { prestamoId, equipoId });
       return updated;
     } catch (err) {
       await session.abortTransaction();
@@ -195,6 +200,7 @@ class PrestamoService {
       }, session);
 
       await session.commitTransaction();
+      logger.info('Devolución registrada', { prestamo_id, estado: nuevoEstado, equipos: equiposDevueltos.length });
       return { devolucion, prestamo_estado: nuevoEstado };
     } catch (err) {
       await session.abortTransaction();

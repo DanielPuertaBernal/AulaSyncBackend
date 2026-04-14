@@ -2,10 +2,17 @@
 const { Usuario } = require('./auth.schema');
 
 class AuthRepository {
+  /** @param {string} username @returns {Promise<object|null>} Usuario con hash_password */
   async findByUsername(username) {
     return Usuario.findOne({ usuario: username }).select('+hash_password').lean();
   }
 
+  /**
+   * @param {string} userId
+   * @param {object} sessionData - Datos de sesión (token_hash, user_agent, ip, etc.)
+   * @param {number} maxSessions - Máximo de sesiones activas simultáneas
+   * @returns {Promise<boolean>}
+   */
   async addRefreshSession(userId, sessionData, maxSessions = 5) {
     const user = await Usuario.findById(userId).select('+sesiones');
     if (!user) return false;
@@ -21,6 +28,7 @@ class AuthRepository {
     return true;
   }
 
+  /** @param {string} userId @param {string} tokenHash @returns {Promise<object|null>} */
   async findActiveRefreshSession(userId, tokenHash) {
     const user = await Usuario.findById(userId).select('+sesiones').lean();
     if (!user) return null;
@@ -33,6 +41,7 @@ class AuthRepository {
     )) || null;
   }
 
+  /** @param {string} userId @param {string} tokenHash @returns {Promise<boolean>} */
   async revokeRefreshSession(userId, tokenHash) {
     const user = await Usuario.findById(userId).select('+sesiones');
     if (!user) return false;
@@ -51,6 +60,7 @@ class AuthRepository {
     return changed;
   }
 
+  /** @param {string} userId @returns {Promise<boolean>} */
   async revokeAllRefreshSessions(userId) {
     const user = await Usuario.findById(userId).select('+sesiones');
     if (!user) return false;

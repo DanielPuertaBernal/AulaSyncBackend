@@ -2,6 +2,7 @@
 const llaveRepository = require('./llave.repository');
 const comunidadRepository = require('../comunidad/comunidad.repository');
 const ubicacionService = require('../ubicaciones/ubicacion.service');
+const { createLogger } = require('../../shared/utils/logger');
 const {
   buscarPersonaPorCarnet,
   resolverContextoNFC,
@@ -30,6 +31,7 @@ const {
 } = require('../../shared/constants/nfc.constants');
 
 const LIMITE_HORAS_DEMORA = 4;
+const logger = createLogger('Llaves');
 
 function toPlain(record) {
   return typeof record?.toObject === 'function' ? record.toObject() : record;
@@ -119,6 +121,7 @@ class LlaveService {
   }
 
   async procesarLecturaNFC(idCarnet, ubicacion = UBICACION_OFICINA) {
+    logger.info('Procesando lectura NFC', { idCarnet, ubicacion });
     return this.workflows.procesarLecturaNFC(idCarnet, ubicacion);
   }
 
@@ -130,6 +133,7 @@ class LlaveService {
   }
 
   async registrarEntrega(infoClase) {
+    logger.info('Registrando entrega manual de llave', { salon: infoClase?.salon });
     return this.workflows.registrarEntrega(
       infoClase,
       (record) => formatRegistroLlave(toPlain(record)),
@@ -137,10 +141,12 @@ class LlaveService {
   }
 
   async registrarDevolucion(documento, ubicacion = UBICACION_OFICINA) {
+    logger.info('Registrando devolución de llave', { documento, ubicacion });
     return this.workflows.registrarDevolucion(documento, ubicacion);
   }
 
   async exportarHistorial(filters = {}) {
+    logger.info('Exportando historial de llaves', filters);
     const result = await llaveRepository.findHistorial(filters);
     const registros = (result.data || result).map((registro) => formatRegistroLlave(registro));
     return generateExcel(registros, 'Historial Llaves');

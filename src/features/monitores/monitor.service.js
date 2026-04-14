@@ -3,6 +3,9 @@ const monitorRepository = require('./monitor.repository');
 const comunidadRepository = require('../comunidad/comunidad.repository');
 const programacionRepository = require('../programacion/programacion.repository');
 const ApiError = require('../../shared/errors/api.error');
+const { createLogger } = require('../../shared/utils/logger');
+
+const logger = createLogger('Monitores');
 
 class MonitorService {
   async listarTodos() {
@@ -49,6 +52,7 @@ class MonitorService {
     const existing = await monitorRepository.findById(id);
     if (!existing) throw ApiError.notFound('Monitor no encontrado');
     await monitorRepository.deleteById(id);
+    logger.info('Monitor eliminado', { id, nombre: existing.nombre_monitor });
     return { ok: true, mensaje: 'Monitor eliminado correctamente' };
   }
 

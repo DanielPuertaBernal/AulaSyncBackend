@@ -1,11 +1,10 @@
 'use strict';
-/**
- * Global Error Handler Middleware
- */
+const { createLogger } = require('../utils/logger');
+const log = createLogger('ErrorHandler');
 
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
-  console.error(`[ERROR] ${req.method} ${req.path}:`, err.message);
+  log.error(`${req.method} ${req.path}`, err);
 
   // Zod validation error
   if (err.name === 'ZodError') {

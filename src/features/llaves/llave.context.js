@@ -19,10 +19,18 @@ const {
   agruparClasesConsecutivas,
 } = require('./llave.domain');
 
+/** Busca una persona de la comunidad por su ID de carnet NFC. */
 async function buscarPersonaPorCarnet(idCarnet) {
   return comunidadRepository.findByCarnet(idCarnet);
 }
 
+/**
+ * Resuelve el contexto completo para una lectura NFC: préstamo activo, rol y clases disponibles.
+ * Prioriza devolución si hay préstamo pendiente, luego evalua si es docente o monitor.
+ * @param {Object} persona - Persona encontrada por carnet
+ * @param {string} documento - Documento normalizado
+ * @returns {Promise<{ rol, docente, prestamoActivo, clasesDisponibles, mensajeSinClase? }>}
+ */
 async function resolverContextoNFC(persona, documento) {
   // Priorizar devolución: si el documento escaneado ya tiene llave en préstamo,
   // debe permitirse devolver incluso sin clases en programación.
@@ -48,6 +56,7 @@ async function resolverContextoNFC(persona, documento) {
   return resolverContextoMonitor({ persona, documento, todasClases, registrosHoy });
 }
 
+/** Resuelve contexto cuando la persona es un docente con clases programadas. */
 async function resolverContextoDocente({ persona, documento, clasesDocente, registrosHoy }) {
   const prestamoActivo = await llaveRepository.findPendienteByDocumento(documento);
   if (prestamoActivo) {
@@ -77,6 +86,7 @@ async function resolverContextoDocente({ persona, documento, clasesDocente, regi
   return { rol: 'docente', docente: persona, prestamoActivo: null, clasesDisponibles };
 }
 
+/** Resuelve contexto cuando la persona es un monitor autorizado. */
 async function resolverContextoMonitor({ persona, documento, todasClases, registrosHoy }) {
   const asignaciones = await monitorRepository.findByDocumentoMonitor(documento);
   if (!asignaciones.length) {
@@ -131,6 +141,7 @@ async function resolverContextoMonitor({ persona, documento, todasClases, regist
   };
 }
 
+/** Filtra clases disponibles para un monitor según sus asignaciones y registros ya procesados. */
 async function obtenerClasesDisponiblesMonitor({ asignaciones = [], todasClases = [], registrosHoy = [] }) {
   const clasesMonitor = [];
 
@@ -155,6 +166,7 @@ async function obtenerClasesDisponiblesMonitor({ asignaciones = [], todasClases 
   return agruparClasesConsecutivas(clasesMonitor);
 }
 
+/** Busca una clase específica para confirmar un préstamo anticipado (docente o monitor). */
 async function buscarClaseParaConfirmacion({ persona, aula, horario, rol }) {
   const documento = normalizarDocumento(persona.numero_documento);
   const aulaNormalizada = normalizeAula(aula);

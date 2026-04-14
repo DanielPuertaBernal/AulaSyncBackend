@@ -6,19 +6,25 @@ const {
   devolucionLlaveTemplate,
   mensajePersonalizadoTemplate,
 } = require('../../shared/email/templates/devolucion-llave.template');
+const { createLogger } = require('../../shared/utils/logger');
+
+const logger = createLogger('Notificaciones');
 
 const ASUNTO_PREDETERMINADO = 'Recordatorio de devolución de llave - AulaSync';
+const MS_POR_HORA = 1000 * 60 * 60;
+const MS_POR_MINUTO = 1000 * 60;
+const HORAS_POR_DIA = 24;
 
 function calcularTiempoTranscurrido(fechaEntrega) {
   const ahora = new Date();
   const entrega = new Date(fechaEntrega);
   const diffMs = ahora - entrega;
-  const horas = Math.floor(diffMs / (1000 * 60 * 60));
-  const minutos = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  const horas = Math.floor(diffMs / MS_POR_HORA);
+  const minutos = Math.floor((diffMs % MS_POR_HORA) / MS_POR_MINUTO);
 
-  if (horas >= 24) {
-    const dias = Math.floor(horas / 24);
-    const horasRestantes = horas % 24;
+  if (horas >= HORAS_POR_DIA) {
+    const dias = Math.floor(horas / HORAS_POR_DIA);
+    const horasRestantes = horas % HORAS_POR_DIA;
     return `${dias} día${dias > 1 ? 's' : ''} y ${horasRestantes}h`;
   }
   return `${horas}h ${minutos}min`;
@@ -90,6 +96,8 @@ class NotificacionService {
 
     const enviados = resultados.filter((r) => r.estado === 'enviado').length;
     const fallidos = resultados.filter((r) => r.estado === 'fallido').length;
+
+    logger.info('Notificaciones enviadas', { enviados, fallidos, total: resultados.length, tipo_mensaje });
 
     return { enviados, fallidos, total: resultados.length, detalle: resultados };
   }

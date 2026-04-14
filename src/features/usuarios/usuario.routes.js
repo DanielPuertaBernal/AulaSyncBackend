@@ -34,13 +34,146 @@ const contrasenaSchema = z.object({
   passwordNueva: z.string().min(6),
 });
 
-// Solo ADMIN puede listar y crear usuarios
+/**
+ * @openapi
+ * /usuarios:
+ *   get:
+ *     tags: [Usuarios]
+ *     summary: Listar usuarios
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de usuarios
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     usuarios:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Usuario'
+ *       401:
+ *         $ref: '#/components/schemas/ErrorNoAutenticado'
+ *       403:
+ *         $ref: '#/components/schemas/ErrorNoAutorizado'
+ */
 router.get('/', ...requireAdmin, (req, res) => usuarioController.listar(req, res));
+
+/**
+ * @openapi
+ * /usuarios:
+ *   post:
+ *     tags: [Usuarios]
+ *     summary: Crear usuario
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CrearUsuarioRequest'
+ *     responses:
+ *       201:
+ *         description: Usuario creado
+ *       400:
+ *         description: Datos inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorValidacion'
+ *       403:
+ *         $ref: '#/components/schemas/ErrorNoAutorizado'
+ */
 router.post('/', ...requireAdmin, validate(crearUsuarioSchema), (req, res) => usuarioController.crear(req, res));
+
+/**
+ * @openapi
+ * /usuarios/{username}/estado:
+ *   patch:
+ *     tags: [Usuarios]
+ *     summary: Cambiar estado (activo/inactivo)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: username
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [activo]
+ *             properties:
+ *               activo:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Estado actualizado
+ *       403:
+ *         $ref: '#/components/schemas/ErrorNoAutorizado'
+ *       404:
+ *         $ref: '#/components/schemas/ErrorNoEncontrado'
+ */
 router.patch('/:username/estado', ...requireAdmin, validate(estadoSchema), (req, res) => usuarioController.cambiarEstado(req, res));
 
-// Cualquier usuario autenticado puede editar su perfil y contraseña
+/**
+ * @openapi
+ * /usuarios/perfil:
+ *   patch:
+ *     tags: [Usuarios]
+ *     summary: Editar perfil propio
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ActualizarPerfilRequest'
+ *     responses:
+ *       200:
+ *         description: Perfil actualizado
+ *       400:
+ *         description: Datos inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorValidacion'
+ */
 router.patch('/perfil', ...requireAuth, validate(perfilSchema), (req, res) => usuarioController.editarPerfil(req, res));
+
+/**
+ * @openapi
+ * /usuarios/contrasena:
+ *   patch:
+ *     tags: [Usuarios]
+ *     summary: Cambiar contraseña propia
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CambiarContrasenaRequest'
+ *     responses:
+ *       200:
+ *         description: Contraseña actualizada
+ *       400:
+ *         description: Contraseña actual incorrecta
+ */
 router.patch('/contrasena', ...requireAuth, validate(contrasenaSchema), (req, res) => usuarioController.cambiarContrasena(req, res));
 
 module.exports = router;
