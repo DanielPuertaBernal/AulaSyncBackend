@@ -3,10 +3,12 @@ const mongoose = require('mongoose');
 const { Programacion } = require('./programacion.schema');
 
 class ProgramacionRepository {
+  /** @returns {Promise<object[]>} */
   async findAll() {
     return Programacion.find().lean();
   }
 
+  /** @param {string} dia - Nombre del día (ej: 'Lunes') @returns {Promise<object[]>} */
   async findByDia(dia) {
     const sinTildes = dia.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const pattern = sinTildes.split('').map((ch) => {
@@ -16,10 +18,12 @@ class ProgramacionRepository {
     return Programacion.find({ dia: new RegExp(`^${pattern}$`, 'i') }).lean();
   }
 
+  /** @param {string} documento @returns {Promise<object[]>} */
   async findByDocumento(documento) {
     return Programacion.find({ numero_documento: documento }).lean();
   }
 
+  /** @param {object[]} registros @returns {Promise<{insertados: number}>} Reemplaza toda la programación */
   async bulkInsert(registros) {
     const session = await mongoose.startSession();
     try {

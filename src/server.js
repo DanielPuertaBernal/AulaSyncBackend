@@ -1,10 +1,9 @@
 'use strict';
-/**
- * server.js - HTTP + Socket.io server bootstrap
- */
 require('dotenv').config();
 const http = require('http');
 const { Server } = require('socket.io');
+const { createLogger } = require('./shared/utils/logger');
+const log = createLogger('Server');
 
 const app = require('./app');
 const mongoClient = require('./shared/db/mongo.client');
@@ -44,23 +43,23 @@ async function bootstrap() {
 
   // 4. Escuchar
   httpServer.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-    console.log(`📡 WebSocket NFC en ws://localhost:${PORT}/nfc`);
-    console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+    log.info(`Servidor corriendo en http://localhost:${PORT}`);
+    log.info(`WebSocket NFC en ws://localhost:${PORT}/nfc`);
+    log.info(`Ambiente: ${process.env.NODE_ENV || 'development'}`);
   });
 
   // 5. Manejo de errores no capturados
   process.on('uncaughtException', (err) => {
-    console.error('💥 uncaughtException:', err);
+    log.error('uncaughtException', err);
     process.exit(1);
   });
   process.on('unhandledRejection', (reason) => {
-    console.error('💥 unhandledRejection:', reason);
+    log.error('unhandledRejection', reason);
     process.exit(1);
   });
 }
 
 bootstrap().catch((err) => {
-  console.error('❌ Error iniciando servidor:', err);
+  log.error('Error iniciando servidor', err);
   process.exit(1);
 });

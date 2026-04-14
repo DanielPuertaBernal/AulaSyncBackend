@@ -3,6 +3,7 @@ const notificacionService = require('./notificacion.service');
 const { parsePagination } = require('../../shared/utils/pagination.helper');
 
 class NotificacionController {
+  /** POST /api/notificaciones/devolucion-llaves - Envía emails de recordatorio */
   async enviarDevolucionLlaves(req, res) {
     const enviadoPor = req.user?.nombre || req.user?.usuario || 'desconocido';
     const resultado = await notificacionService.enviarNotificacionesDevolucion(req.body, enviadoPor);
@@ -14,6 +15,7 @@ class NotificacionController {
     });
   }
 
+  /** GET /api/notificaciones/historial?fecha&documento&estado_envio&page&limit */
   async historial(req, res) {
     const { fecha, documento, estado_envio, page, limit } = req.query;
     const pagination = parsePagination({ page, limit });

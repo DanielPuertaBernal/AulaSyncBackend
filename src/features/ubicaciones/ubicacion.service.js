@@ -2,10 +2,13 @@
 const ubicacionRepository = require('./ubicacion.repository');
 const ApiError = require('../../shared/errors/api.error');
 const { normalizeKey, normalizeString } = require('../../shared/utils/normalize.helper');
+const { createLogger } = require('../../shared/utils/logger');
 const {
   UBICACIONES,
   OPERACIONES_UBICACION,
 } = require('../../shared/constants/nfc.constants');
+
+const logger = createLogger('Ubicaciones');
 
 const DEFAULT_UBICACIONES = Object.freeze([
   {
@@ -116,6 +119,7 @@ class UbicacionService {
     await this.asegurarIniciales();
     const deleted = await ubicacionRepository.deleteById(id);
     if (!deleted) throw ApiError.notFound('Ubicación no encontrada');
+    logger.info('Ubicación eliminada', { id });
     return { ok: true };
   }
 

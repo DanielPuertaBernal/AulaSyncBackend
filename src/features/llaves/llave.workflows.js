@@ -16,6 +16,11 @@ const {
   construirRegistroEntregaManual,
 } = require('./llave.domain');
 
+/**
+ * Crea los workflows de gestión de llaves inyectando dependencias.
+ * @param {Object} deps - Repositorios y helpers inyectados
+ * @returns {{ procesarLecturaNFC, confirmarPrestamoAnticipado, registrarEntrega, registrarDevolucion }}
+ */
 function createLlaveWorkflows({
   buscarPersonaPorCarnet,
   resolverContextoNFC,
@@ -30,6 +35,7 @@ function createLlaveWorkflows({
   validarEntregaManual,
   normalizarOrigenRegistro,
 }) {
+  /** Procesa la devolución de una llave a partir del contexto NFC. */
   async function resolverResultadoDevolucion({ contexto, persona, documento, ubicacion }) {
     try {
       const ubicacionDevolucion = await normalizarUbicacionDevolucion(ubicacion);
@@ -52,6 +58,7 @@ function createLlaveWorkflows({
     }
   }
 
+  /** Resuelve el préstamo de llave: busca clase actual, valida anticipación y persiste. */
   async function resolverResultadoPrestamo({ contexto, persona, documento, ubicacion }) {
     let ubicacionPrestamo;
     try {
@@ -113,6 +120,12 @@ function createLlaveWorkflows({
     });
   }
 
+  /**
+   * Punto de entrada principal: procesa una lectura NFC y decide si es préstamo o devolución.
+   * @param {string} idCarnet - ID del carnet leído
+   * @param {string} ubicacion - Ubicación del lector NFC
+   * @returns {Promise<Object>} Resultado con tipo (prestamo|devolucion|error|sin_clase|anticipado)
+   */
   async function procesarLecturaNFC(idCarnet, ubicacion) {
     const persona = await buscarPersonaPorCarnet(idCarnet);
     if (!persona) {
@@ -129,6 +142,7 @@ function createLlaveWorkflows({
     return resolverResultadoPrestamo({ contexto, persona, documento, ubicacion });
   }
 
+  /** Confirma un préstamo que fue marcado como anticipado por el usuario. */
   async function confirmarPrestamoAnticipado({
     id_carnet,
     horario,
@@ -183,6 +197,7 @@ function createLlaveWorkflows({
     };
   }
 
+  /** Registra una entrega manual de llave (sin NFC). */
   async function registrarEntrega(infoClase, formatRegistro) {
     const ubicacionPrestamo = await normalizarUbicacionPrestamo(infoClase.ubicacion);
     const origenRegistro = normalizarOrigenRegistro(infoClase.origen);
@@ -209,6 +224,7 @@ function createLlaveWorkflows({
     };
   }
 
+  /** Registra una devolución manual de llave (sin NFC). */
   async function registrarDevolucion(documento, ubicacion) {
     const doc = normalizarDocumento(documento);
     const registro = await findPendienteByDocumento(doc);

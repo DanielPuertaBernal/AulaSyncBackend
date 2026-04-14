@@ -7,6 +7,9 @@
 const equipoRepository = require('./equipo.repository');
 const ApiError = require('../../shared/errors/api.error');
 const { normalizeString } = require('../../shared/utils/normalize.helper');
+const { createLogger } = require('../../shared/utils/logger');
+
+const logger = createLogger('Equipos');
 
 class EquipoService {
   async listar() { return equipoRepository.findAll(); }
@@ -46,6 +49,7 @@ class EquipoService {
   }
 
   async actualizar(id, datos) {
+    logger.debug('Actualizando equipo', { id });
     const actual = await equipoRepository.findById(id);
     if (!actual) throw ApiError.notFound('Equipo no encontrado');
 

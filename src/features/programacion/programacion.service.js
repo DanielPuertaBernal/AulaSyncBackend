@@ -4,6 +4,9 @@ const ApiError = require('../../shared/errors/api.error');
 const { parseExcel, cleanText, cleanDocumento, generateExcel } = require('../../shared/utils/excel.parser');
 const { getDiaActual, horaAMinutos } = require('../../shared/utils/date.helper');
 const { normalizeDocumento, normalizeString, normalizeUpperString } = require('../../shared/utils/normalize.helper');
+const { createLogger } = require('../../shared/utils/logger');
+
+const logger = createLogger('Programacion');
 
 class ProgramacionService {
   async listar() {
@@ -39,9 +42,15 @@ class ProgramacionService {
     }
 
     const consolidados = this._unificarHorarios(limpios);
+    logger.info('Importación de programación', { filas: rows.length, validos: limpios.length, consolidados: consolidados.length });
     return programacionRepository.bulkInsert(consolidados);
   }
 
+  /**
+   * Limpia y normaliza filas del Excel mapeando columnas al schema interno.
+   * @param {Array<Object>} rows - Filas crudas del Excel
+   * @returns {Array<Object>} Registros válidos normalizados
+   */
   _limpiarProgramacion(rows) {
     const MAPEO = {
       'nroidenti': 'numero_documento',
@@ -116,6 +125,7 @@ class ProgramacionService {
       .filter((r) => this._esRegistroValido(r));
   }
 
+  /** Redondea minutos 1-9 a :00 (ej: 7:05 → 7:00). */
   _normalizarMinutos(hora) {
     if (!hora) return hora;
     const parts = String(hora).split(':');
@@ -127,10 +137,16 @@ class ProgramacionService {
     return hora;
   }
 
+  /** Valida que un registro tenga los campos mínimos requeridos. */
   _esRegistroValido(r) {
     return !!(r.numero_documento && r.docente && r.dia && r.aula);
   }
 
+  /**
+   * Consolida bloques horarios consecutivos del mismo docente/aula/materia en un solo registro.
+   * @param {Array<Object>} registros - Registros limpios
+   * @returns {Array<Object>} Registros con horarios unificados
+   */
   _unificarHorarios(registros) {
     const CAMPOS_AGRUPACION = [
       'semestre', 'codigo_materia', 'grupo', 'nivel_grupo',

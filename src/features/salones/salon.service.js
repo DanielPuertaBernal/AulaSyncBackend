@@ -7,6 +7,9 @@ const {
   normalizeString,
   normalizeUpperString,
 } = require('../../shared/utils/normalize.helper');
+const { createLogger } = require('../../shared/utils/logger');
+
+const logger = createLogger('Salones');
 
 class SalonService {
   async listar() {
@@ -56,6 +59,7 @@ class SalonService {
   async eliminar(id) {
     const deleted = await salonRepository.deleteById(id);
     if (!deleted) throw ApiError.notFound('Salón no encontrado');
+    logger.info('Salón eliminado', { id });
     return { ok: true };
   }
 

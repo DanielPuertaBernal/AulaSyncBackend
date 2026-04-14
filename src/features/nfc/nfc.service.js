@@ -3,11 +3,14 @@ const llaveService = require('../llaves/llave.service');
 const nfcGateway = require('../../shared/websocket/nfc.gateway');
 const ubicacionService = require('../ubicaciones/ubicacion.service');
 const nfcRepository = require('./nfc.repository');
+const { createLogger } = require('../../shared/utils/logger');
 const {
   NFC_MODOS,
   OPERACIONES_UBICACION,
   UBICACIONES: { OFICINA: UBICACION_OFICINA },
 } = require('../../shared/constants/nfc.constants');
+
+const logger = createLogger('NFCService');
 
 class NFCService {
   obtenerEstado() {
@@ -20,6 +23,7 @@ class NFCService {
    */
   async procesarLectura(idCarnet, ubicacion = UBICACION_OFICINA, options = {}) {
     const eventoId = String(options?.eventoId || '').trim();
+    logger.info('Lectura NFC recibida', { idCarnet, ubicacion, eventoId: eventoId || undefined });
 
     if (eventoId) {
       const existente = await nfcRepository.findByEventoId(eventoId);

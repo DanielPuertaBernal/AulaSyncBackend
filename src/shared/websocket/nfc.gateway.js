@@ -1,11 +1,8 @@
 'use strict';
-/**
- * NFC Gateway - WebSocket + SerialPort
- * Sistema de intención NFC con cola de espera FIFO.
- * Solo el cliente con intención activa recibe eventos NFC.
- */
 const { EventEmitter } = require('events');
 const jwt = require('jsonwebtoken');
+const { createLogger } = require('../utils/logger');
+const log = createLogger('NFC');
 const {
   NFC_MODOS,
   NFC_MODOS_PERMITIDOS,
@@ -38,10 +35,12 @@ class NFCGateway extends EventEmitter {
     this._colaEspera = [];        // [{ socketId, modo, userId }]
   }
 
+  /** Retorna el modo NFC activo o AUTO si no hay intención registrada. */
   getModoActivo() {
     return this._intencionActiva?.modo || NFC_MODOS.AUTO;
   }
 
+  /** Retorna el estado completo del gateway (puerto, modo, cola, última lectura). */
   obtenerEstado() {
     return {
       activo: this._active,
@@ -97,6 +96,7 @@ class NFCGateway extends EventEmitter {
 
   // ─── Sistema de intención NFC ───
 
+  /** Programa la expiración automática de una intención NFC tras INTENCION_TTL_MS. */
   _programarExpiracion(socketId) {
     if (!this._intencionActiva || this._intencionActiva.socketId !== socketId) return;
     if (this._intencionActiva.timer) clearTimeout(this._intencionActiva.timer);
@@ -106,7 +106,7 @@ class NFCGateway extends EventEmitter {
       if (this._intencionActiva?.socketId === socketId) {
         const sock = this._io?.of('/nfc').sockets.get(socketId);
         if (sock) sock.emit('nfc:intencion_expirada');
-        console.log(`⏰ Intención NFC expirada: ${socketId}`);
+      log.debug(`Intencion NFC expirada: ${socketId}`);
         this._liberarIntencion();
       }
     }, INTENCION_TTL_MS);
@@ -117,6 +117,7 @@ class NFCGateway extends EventEmitter {
     this._programarExpiracion(socketId);
   }
 
+  /** Libera la intención activa y promueve la siguiente en cola, o marca el lector como libre. */
   _liberarIntencion() {
     if (this._intencionActiva?.timer) {
       clearTimeout(this._intencionActiva.timer);
@@ -160,6 +161,11 @@ class NFCGateway extends EventEmitter {
     });
   }
 
+  /**
+   * Registra intención de uso NFC: asigna directamente, renueva, reemplaza mismo usuario, o encola.
+   * @param {import('socket.io').Socket} socket
+   * @param {{ modo: string }} param1
+   */
   _registrarIntencion(socket, { modo }) {
     if (!NFC_MODOS_PERMITIDOS.includes(modo)) return;
 
@@ -243,6 +249,7 @@ class NFCGateway extends EventEmitter {
 
   // ─── Socket handlers ───
 
+  /** Registra handlers de autenticación JWT y eventos NFC en el namespace /nfc. */
   _registerSocketHandlers() {
     const nsp = this._io.of('/nfc');
 
@@ -274,7 +281,7 @@ class NFCGateway extends EventEmitter {
     });
 
     nsp.on('connection', (socket) => {
-      console.log(`🔌 Cliente NFC conectado: ${socket.id} (${socket.data.user?.usuario || 'desconocido'})`);
+      log.info(`Cliente conectado: ${socket.id} (${socket.data.user?.usuario || 'desconocido'})`);
       socket.emit('nfc:status', {
         ...this.obtenerEstado(),
         mensaje: this._active ? 'Escuchando NFC...' : 'Conectado al servidor NFC',
@@ -289,12 +296,13 @@ class NFCGateway extends EventEmitter {
       socket.on('nfc:renovar_intencion', () => this._renovarIntencion(socket.id));
 
       socket.on('disconnect', () => {
-        console.log(`🔌 Cliente NFC desconectado: ${socket.id}`);
+        log.info(`Cliente desconectado: ${socket.id}`);
         this._handleDisconnect(socket);
       });
     });
   }
 
+  /** Inicializa la conexión serial con el lector NFC físico. */
   async _connectSerial() {
     if (this._port) return;
 
@@ -314,7 +322,7 @@ class NFCGateway extends EventEmitter {
       this._port.on('error', (err) => {
         this._opening = false;
         const mensaje = `Error SerialPort NFC: ${err.message}`;
-        console.warn('⚠️ ', mensaje);
+        log.error(mensaje);
         this._emitError(mensaje);
       });
 
@@ -329,11 +337,11 @@ class NFCGateway extends EventEmitter {
         }
       });
 
-      console.log(`🔧 SerialPort NFC configurado en ${this._portPath}@${this._baudRate}`);
+      log.info(`SerialPort configurado en ${this._portPath}@${this._baudRate}`);
     } catch (err) {
       const mensaje = `serialport no disponible o sin puerto NFC físico: ${err.message}`;
       this._lastError = mensaje;
-      console.warn('⚠️ ', mensaje);
+      log.warn(mensaje);
     }
   }
 
@@ -428,7 +436,7 @@ class NFCGateway extends EventEmitter {
     this._lastReadAt = new Date().toISOString();
 
     const payload = { codigo: rawData, timestamp: this._lastReadAt };
-    console.log('📡 NFC leído:', payload);
+    log.debug('Lectura NFC', payload);
 
     // Emitir al namespace /nfc
     if (this._io) {
@@ -455,6 +463,7 @@ class NFCGateway extends EventEmitter {
     this.emit('resultado', data);
   }
 
+  /** Emite un evento de carnet leído al socket con intención activa o broadcast. */
   emitirCarnetLeido(idCarnet, ubicacion = UBICACIONES.OFICINA) {
     if (this._io) {
       const payload = {

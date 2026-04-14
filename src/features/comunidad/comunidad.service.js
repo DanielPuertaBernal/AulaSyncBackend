@@ -3,6 +3,9 @@ const comunidadRepository = require('./comunidad.repository');
 const ApiError = require('../../shared/errors/api.error');
 const { normalizeDocumento } = require('../../shared/utils/normalize.helper');
 const { TIPOS_COMUNIDAD } = require('./comunidad.schema');
+const { createLogger } = require('../../shared/utils/logger');
+
+const logger = createLogger('Comunidad');
 
 class ComunidadService {
   async listar(tipo) {
@@ -42,10 +45,12 @@ class ComunidadService {
 
     if (validados.length === 1) {
       const persona = await comunidadRepository.upsertOne(validados[0]);
+      logger.info('Sync individual completado', { documento: validados[0].numero_documento });
       return { sincronizados: 1, detalle: persona };
     }
 
     const resultado = await comunidadRepository.upsertMany(validados);
+    logger.info('Sync masivo completado', { total: validados.length });
     return { sincronizados: validados.length, ...resultado };
   }
 

@@ -8,6 +8,9 @@ const authRepository = require('../auth/auth.repository');
 const authService = require('../auth/auth.service');
 const ApiError = require('../../shared/errors/api.error');
 const { ROLES } = require('./usuario.schema');
+const { createLogger } = require('../../shared/utils/logger');
+
+const logger = createLogger('Usuarios');
 
 class UsuarioService {
   /**
@@ -72,6 +75,7 @@ class UsuarioService {
     if (!activo) {
       await authRepository.revokeAllRefreshSessions(updated._id);
     }
+    logger.info('Estado de usuario cambiado', { username, activo });
     return updated;
   }
 

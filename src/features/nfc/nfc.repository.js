@@ -2,11 +2,13 @@
 const { NFCEvento } = require('./nfc.schema');
 
 class NFCRepository {
+  /** @param {string} eventoId @returns {Promise<object|null>} Evento previamente procesado */
   async findByEventoId(eventoId) {
     if (!eventoId) return null;
     return NFCEvento.findOne({ evento_id: eventoId }).lean();
   }
 
+  /** @param {{eventoId: string, idCarnet: string, ubicacion: string, resultado: object}} data @returns {Promise<object|null>} */
   async guardarResultado({ eventoId, idCarnet, ubicacion, resultado }) {
     if (!eventoId) return null;
 

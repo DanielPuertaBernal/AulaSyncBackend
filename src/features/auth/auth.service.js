@@ -5,6 +5,9 @@ const jwt = require('jsonwebtoken');
 const ApiError = require('../../shared/errors/api.error');
 const authRepository = require('./auth.repository');
 const usuarioRepository = require('../usuarios/usuario.repository');
+const { createLogger } = require('../../shared/utils/logger');
+
+const logger = createLogger('Auth');
 
 const SALT_ROUNDS = 12;
 const JWT_ISSUER = process.env.JWT_ISSUER || 'aulasync-api';
@@ -24,17 +27,21 @@ class AuthService {
     const user = await authRepository.findByUsername(usuario);
 
     if (!user || !user.activo) {
+      logger.warn('Login fallido: usuario no encontrado o inactivo', { usuario });
       return { ok: false, mensaje: INVALID_MSG };
     }
 
     const passwordMatch = await bcrypt.compare(password, user.hash_password);
     if (!passwordMatch) {
+      logger.warn('Login fallido: contraseña incorrecta', { usuario });
       return { ok: false, mensaje: INVALID_MSG };
     }
 
     const token = this._signAccessToken(user);
     const refreshToken = this._signRefreshToken(user._id.toString());
     await this._persistRefreshSession(user, refreshToken, context);
+
+    logger.info('Login exitoso', { usuario, rol: user.rol });
 
     // No retornar hash_password ni sesiones
     const { hash_password, sesiones, ...usuarioSafe } = user;
@@ -78,6 +85,8 @@ class AuthService {
     const newRefreshToken = this._signRefreshToken(user._id.toString());
     await this._persistRefreshSession(user, newRefreshToken, context);
 
+    logger.debug('Token refresh exitoso', { userId: payload.sub });
+
     return { ok: true, token: newToken, refreshToken: newRefreshToken };
   }
 
@@ -88,10 +97,12 @@ class AuthService {
 
     if (refreshToken) {
       await authRepository.revokeRefreshSession(userId, this._hashToken(refreshToken));
+      logger.info('Logout (sesión individual)', { userId });
       return { ok: true };
     }
 
     await authRepository.revokeAllRefreshSessions(userId);
+    logger.info('Logout (todas las sesiones)', { userId });
     return { ok: true };
   }
 

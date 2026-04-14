@@ -23,6 +23,30 @@ const enviarNotificacionSchema = z.object({
   asunto: z.string().optional().default(''),
 });
 
+/**
+ * @openapi
+ * /notificaciones/devolucion-llaves:
+ *   post:
+ *     tags: [Notificaciones]
+ *     summary: Enviar notificación de devolución de llaves
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/EnviarNotificacionRequest'
+ *     responses:
+ *       200:
+ *         description: Notificación enviada
+ *       400:
+ *         description: Datos inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorValidacion'
+ */
 router.post(
   '/devolucion-llaves',
   ...requireAuth,
@@ -30,6 +54,43 @@ router.post(
   (req, res) => notificacionController.enviarDevolucionLlaves(req, res)
 );
 
+/**
+ * @openapi
+ * /notificaciones/historial:
+ *   get:
+ *     tags: [Notificaciones]
+ *     summary: Historial de notificaciones enviadas
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: desde
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: hasta
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Historial de notificaciones
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     notificaciones:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Notificacion'
+ */
 router.get(
   '/historial',
   ...requireAuth,

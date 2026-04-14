@@ -2,6 +2,9 @@
 const bloqueRepository = require('./bloque.repository');
 const ApiError = require('../../shared/errors/api.error');
 const { normalizeUpperString } = require('../../shared/utils/normalize.helper');
+const { createLogger } = require('../../shared/utils/logger');
+
+const logger = createLogger('Bloques');
 
 class BloqueService {
   async listar() {
@@ -35,6 +38,7 @@ class BloqueService {
   async eliminar(id) {
     const deleted = await bloqueRepository.deleteById(id);
     if (!deleted) throw ApiError.notFound('Bloque no encontrado');
+    logger.info('Bloque eliminado', { id });
     return { ok: true };
   }
 
