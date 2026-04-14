@@ -1,7 +1,7 @@
 'use strict';
 
 const llaveRepository = require('./llave.repository');
-const docenteRepository = require('../docentes/docente.repository');
+const comunidadRepository = require('../comunidad/comunidad.repository');
 const programacionRepository = require('../programacion/programacion.repository');
 const monitorRepository = require('../monitores/monitor.repository');
 const {
@@ -20,7 +20,7 @@ const {
 } = require('./llave.domain');
 
 async function buscarPersonaPorCarnet(idCarnet) {
-  return docenteRepository.findByCarnet(idCarnet);
+  return comunidadRepository.findByCarnet(idCarnet);
 }
 
 async function resolverContextoNFC(persona, documento) {
@@ -93,7 +93,7 @@ async function resolverContextoMonitor({ persona, documento, todasClases, regist
     const docenteDocumento = normalizarDocumento(asignacion.numero_documento_docente);
     const prestamoActivo = await llaveRepository.findPendienteByDocumento(docenteDocumento);
     if (prestamoActivo) {
-      const docente = await docenteRepository.findByDocumento(docenteDocumento);
+      const docente = await comunidadRepository.findByDocumento(docenteDocumento);
       return {
         rol: 'monitor',
         docente: docente || { numero_documento: docenteDocumento, nombre: asignacion.nombre_docente },
@@ -119,7 +119,7 @@ async function resolverContextoMonitor({ persona, documento, todasClases, regist
     };
   }
 
-  const docenteTitular = await docenteRepository.findByDocumento(
+  const docenteTitular = await comunidadRepository.findByDocumento(
     normalizarDocumento(clasesDisponibles[0].numero_documento)
   );
 

@@ -1,6 +1,6 @@
 'use strict';
 const monitorRepository = require('./monitor.repository');
-const docenteRepository = require('../docentes/docente.repository');
+const comunidadRepository = require('../comunidad/comunidad.repository');
 const programacionRepository = require('../programacion/programacion.repository');
 const ApiError = require('../../shared/errors/api.error');
 
@@ -18,10 +18,10 @@ class MonitorService {
   }
 
   async registrar({ numero_documento_docente, numero_documento_monitor, materia, aula, horario, dia }) {
-    const docente = await docenteRepository.findByDocumento(numero_documento_docente);
+    const docente = await comunidadRepository.findByDocumento(numero_documento_docente);
     if (!docente) throw ApiError.notFound('Docente no encontrado');
 
-    const monitor = await docenteRepository.findByDocumento(numero_documento_monitor);
+    const monitor = await comunidadRepository.findByDocumento(numero_documento_monitor);
     if (!monitor) throw ApiError.notFound('Persona no encontrada en el sistema');
 
     if (numero_documento_docente === numero_documento_monitor) {

@@ -1,6 +1,6 @@
 'use strict';
 const llaveRepository = require('./llave.repository');
-const docenteRepository = require('../docentes/docente.repository');
+const comunidadRepository = require('../comunidad/comunidad.repository');
 const ubicacionService = require('../ubicaciones/ubicacion.service');
 const {
   buscarPersonaPorCarnet,
@@ -54,7 +54,7 @@ class LlaveService {
       resolverContextoNFC,
       buscarClaseParaConfirmacion,
       findPendienteByDocumento: (documento) => llaveRepository.findPendienteByDocumento(documento),
-      findDocenteByDocumento: (documento) => docenteRepository.findByDocumento(documento),
+      findDocenteByDocumento: (documento) => comunidadRepository.findByDocumento(documento),
       createRegistro: (registro) => llaveRepository.create(registro),
       normalizarUbicacionPrestamo,
       normalizarUbicacionDevolucion,
@@ -85,7 +85,7 @@ class LlaveService {
     const documentos = [...new Set(pendientes.map((p) => p.documento).filter(Boolean))];
     const correoMap = new Map();
     for (const doc of documentos) {
-      const docente = await docenteRepository.findByDocumento(doc);
+      const docente = await comunidadRepository.findByDocumento(doc);
       if (docente?.correo) correoMap.set(doc, docente.correo);
     }
     return pendientes.map((p) => ({ ...p, correo: correoMap.get(p.documento) || '' }));
@@ -98,7 +98,7 @@ class LlaveService {
     const documentos = [...new Set(todos.map((p) => p.documento).filter(Boolean))];
     const correoMap = new Map();
     for (const doc of documentos) {
-      const docente = await docenteRepository.findByDocumento(doc);
+      const docente = await comunidadRepository.findByDocumento(doc);
       if (docente?.correo) correoMap.set(doc, docente.correo);
     }
     return todos.map((p) => ({ ...p, correo: correoMap.get(p.documento) || '' }));

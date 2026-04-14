@@ -10,7 +10,7 @@ const errorHandler = require('./shared/middlewares/error.handler');
 // Feature routes
 const authRoutes = require('./features/auth/auth.routes');
 const usuarioRoutes = require('./features/usuarios/usuario.routes');
-const docenteRoutes = require('./features/docentes/docente.routes');
+const comunidadRoutes = require('./features/comunidad/comunidad.routes');
 const programacionRoutes = require('./features/programacion/programacion.routes');
 const llaveRoutes = require('./features/llaves/llave.routes');
 const equipoRoutes = require('./features/equipos/equipo.routes');
@@ -39,7 +39,7 @@ app.get('/health', (req, res) => res.json({ ok: true, timestamp: new Date().toIS
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuarioRoutes);
-app.use('/api/docentes', docenteRoutes);
+app.use('/api/comunidad', comunidadRoutes);
 app.use('/api/programacion', programacionRoutes);
 app.use('/api/llaves', llaveRoutes);
 app.use('/api/equipos', equipoRoutes);

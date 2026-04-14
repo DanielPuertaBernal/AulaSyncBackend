@@ -1,6 +1,6 @@
 'use strict';
 const notificacionRepository = require('./notificacion.repository');
-const docenteRepository = require('../docentes/docente.repository');
+const comunidadRepository = require('../comunidad/comunidad.repository');
 const { sendBulkEmails } = require('../../shared/email/email.service');
 const {
   devolucionLlaveTemplate,
