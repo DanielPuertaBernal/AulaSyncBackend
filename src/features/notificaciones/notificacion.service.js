@@ -33,6 +33,7 @@ function calcularTiempoTranscurrido(fechaEntrega) {
 function formatearFecha(fecha) {
   const d = new Date(fecha);
   return d.toLocaleDateString('es-CO', {
+    timeZone: 'America/Bogota',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -47,7 +48,7 @@ class NotificacionService {
 
     // Build emails
     const emails = destinatarios.map((dest) => {
-      const tiempoTranscurrido = calcularTiempoTranscurrido(dest.fecha_prestamo);
+      const tiempoTranscurrido = dest.tiempo_transcurrido || calcularTiempoTranscurrido(dest.fecha_prestamo);
       const fechaFormateada = formatearFecha(dest.fecha_prestamo);
 
       const htmlContent =

@@ -1,35 +1,35 @@
 'use strict';
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 const { createLogger } = require('../utils/logger');
 const log = createLogger('Email');
 
-const EMAIL_FROM = process.env.EMAIL_FROM;
-
-let _resend = null;
-function getResend() {
-  if (!_resend) {
-    if (!process.env.RESEND_API_KEY) {
-      throw new Error('RESEND_API_KEY no configurada. Agregue la variable de entorno.');
+let _transporter = null;
+function getTransporter() {
+  if (!_transporter) {
+    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASS) {
+      throw new Error('GMAIL_USER y GMAIL_APP_PASS no configuradas. Agregue las variables de entorno.');
     }
-    _resend = new Resend(process.env.RESEND_API_KEY);
+    _transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASS,
+      },
+    });
   }
-  return _resend;
+  return _transporter;
 }
 
 async function sendEmail({ to, subject, html }) {
-  const { data, error } = await getResend().emails.send({
-    from: EMAIL_FROM,
+  const info = await getTransporter().sendMail({
+    from: `"AulaSync" <${process.env.GMAIL_USER}>`,
     to,
     subject,
     html,
   });
 
-  if (error) {
-    log.error('Error enviando correo', error);
-    throw new Error(error.message || 'Error al enviar correo');
-  }
-
-  return data;
+  log.info(`Correo enviado a ${to} — messageId: ${info.messageId}`);
+  return { id: info.messageId };
 }
 
 async function sendBulkEmails(emails) {
