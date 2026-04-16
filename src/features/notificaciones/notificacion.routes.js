@@ -13,6 +13,7 @@ const destinatarioSchema = z.object({
   correo: z.string().email('Correo inválido'),
   salon: z.string().optional().default(''),
   fecha_prestamo: z.string().min(1, 'Fecha de préstamo requerida'),
+  tiempo_transcurrido: z.string().optional().default(''),
   llave_id: z.string().optional().default(''),
 });
 
