@@ -3,17 +3,20 @@ const { Notificacion } = require('./notificacion.schema');
 const { applyPagination } = require('../../shared/utils/pagination.helper');
 
 class NotificacionRepository {
-  /** @param {object} data @returns {Promise<object>} */
   async create(data) {
     return Notificacion.create(data);
   }
 
-  /** @param {object[]} docs @returns {Promise<object[]>} */
   async createMany(docs) {
-    return Notificacion.insertMany(docs);
+    return Notificacion.insertMany(docs, { ordered: false }).catch((err) => {
+      // Ignore duplicate key errors from unique index (already sent notifications)
+      if (err.code === 11000 || err.writeErrors?.every((e) => e.err?.code === 11000)) {
+        return err.insertedDocs || [];
+      }
+      throw err;
+    });
   }
 
-  /** @param {object} filters @param {object|null} pagination @returns {Promise<object>} */
   async findHistorial(filters = {}, pagination = null) {
     const query = {};
     if (filters.fecha) {
@@ -21,12 +24,68 @@ class NotificacionRepository {
       const end = new Date(`${filters.fecha}T23:59:59.999`);
       query.fecha_envio = { $gte: start, $lte: end };
     }
+    if (filters.desde || filters.hasta) {
+      query.fecha_envio = query.fecha_envio || {};
+      if (filters.desde) query.fecha_envio.$gte = new Date(`${filters.desde}T00:00:00`);
+      if (filters.hasta) query.fecha_envio.$lte = new Date(`${filters.hasta}T23:59:59.999`);
+    }
     if (filters.documento) query.destinatario_documento = filters.documento;
     if (filters.estado_envio) query.estado_envio = filters.estado_envio;
+    if (filters.tipo_notificacion) query.tipo_notificacion = filters.tipo_notificacion;
+    if (filters.busqueda) {
+      query.$or = [
+        { destinatario_nombre: { $regex: filters.busqueda, $options: 'i' } },
+        { destinatario_documento: { $regex: filters.busqueda, $options: 'i' } },
+      ];
+    }
     return applyPagination(
       Notificacion.find(query).sort({ fecha_envio: -1 }),
       pagination
     );
+  }
+
+  async findById(id) {
+    return Notificacion.findById(id).lean();
+  }
+
+  async updateById(id, updates) {
+    return Notificacion.findByIdAndUpdate(id, { $set: updates }, { new: true }).lean();
+  }
+
+  async countByPrestamoAndTipo(prestamoLlaveId, tipoNotificacion) {
+    return Notificacion.countDocuments({
+      prestamo_llave_id: prestamoLlaveId,
+      tipo_notificacion: tipoNotificacion,
+    });
+  }
+
+  async findLastByPrestamo(prestamoLlaveId) {
+    return Notificacion.findOne({ prestamo_llave_id: prestamoLlaveId })
+      .sort({ fecha_envio: -1 })
+      .lean();
+  }
+
+  async findPendientesReintento(ahora) {
+    return Notificacion.find({
+      estado_envio: 'pendiente',
+      intentos_envio: { $gt: 0, $lt: 3 },
+      proximo_reintento: { $lte: ahora },
+    }).lean();
+  }
+
+  async estadisticas() {
+    const [porEstado, porTipo] = await Promise.all([
+      Notificacion.aggregate([
+        { $group: { _id: '$estado_envio', total: { $sum: 1 } } },
+      ]),
+      Notificacion.aggregate([
+        { $group: { _id: '$tipo_notificacion', total: { $sum: 1 } } },
+      ]),
+    ]);
+    return {
+      por_estado: Object.fromEntries(porEstado.map((r) => [r._id, r.total])),
+      por_tipo: Object.fromEntries(porTipo.map((r) => [r._id, r.total])),
+    };
   }
 }
 

@@ -17,10 +17,10 @@ class NotificacionController {
 
   /** GET /api/notificaciones/historial?fecha&documento&estado_envio&page&limit */
   async historial(req, res) {
-    const { fecha, documento, estado_envio, page, limit } = req.query;
+    const { fecha, documento, estado_envio, tipo_notificacion, busqueda, page, limit } = req.query;
     const pagination = parsePagination({ page, limit });
     const result = await notificacionService.obtenerHistorial(
-      { fecha, documento, estado_envio },
+      { fecha, documento, estado_envio, tipo_notificacion, busqueda },
       pagination
     );
 
@@ -28,6 +28,18 @@ class NotificacionController {
       return res.json({ ok: true, data: { registros: result.data }, meta: result.meta });
     }
     return res.json({ ok: true, data: { registros: result.data || result } });
+  }
+
+  /** GET /api/notificaciones/estadisticas */
+  async estadisticas(_req, res) {
+    const data = await notificacionService.obtenerEstadisticas();
+    return res.json({ ok: true, data });
+  }
+
+  /** POST /api/notificaciones/reenviar/:id */
+  async reenviar(req, res) {
+    const resultado = await notificacionService.reenviar(req.params.id);
+    return res.json({ ok: true, data: resultado });
   }
 }
 

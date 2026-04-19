@@ -98,4 +98,16 @@ router.get(
   (req, res) => notificacionController.historial(req, res)
 );
 
+router.get(
+  '/estadisticas',
+  ...requireAdmin,
+  (req, res) => notificacionController.estadisticas(req, res)
+);
+
+router.post(
+  '/reenviar/:id',
+  ...requireAuth,
+  (req, res) => notificacionController.reenviar(req, res)
+);
+
 module.exports = router;
