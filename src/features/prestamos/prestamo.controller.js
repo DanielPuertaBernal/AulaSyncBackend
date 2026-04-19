@@ -37,6 +37,22 @@ class PrestamoController {
       ...req.body,
       auxiliar_que_recibio: req.body.auxiliar_que_recibio || req.user.nombre,
     });
+
+    // Si se reportó una novedad junto con la devolución, crearla
+    if (req.body?.novedad && req.body.novedad.categoria) {
+      const novedadService = require('../novedades/novedad.service');
+      await novedadService.registrar({
+        tipo_recurso: 'equipo',
+        recurso_id: req.body.prestamo_id,
+        prestamo_ref: req.body.prestamo_id,
+        reportado_por: req.user?.id,
+        reportado_por_nombre: req.user?.nombre || 'Auxiliar',
+        salon: '',
+        categoria: req.body.novedad.categoria,
+        descripcion: req.body.novedad.descripcion || '',
+      });
+    }
+
     return res.json({
       ok: true,
       message: result.prestamo_estado === 'completamente_devuelto'

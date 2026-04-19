@@ -24,6 +24,9 @@ const salonRoutes = require('./features/salones/salon.routes');
 const bloqueRoutes = require('./features/bloques/bloque.routes');
 const ubicacionRoutes = require('./features/ubicaciones/ubicacion.routes');
 const notificacionRoutes = require('./features/notificaciones/notificacion.routes');
+const configuracionRoutes = require('./features/configuracion/configuracion.routes');
+const novedadRoutes = require('./features/novedades/novedad.routes');
+const reservaRoutes = require('./features/reservas/reserva.routes');
 
 const app = express();
 
@@ -58,6 +61,9 @@ app.use('/api/salones', salonRoutes);
 app.use('/api/bloques', bloqueRoutes);
 app.use('/api/ubicaciones', ubicacionRoutes);
 app.use('/api/notificaciones', notificacionRoutes);
+app.use('/api/configuracion', configuracionRoutes);
+app.use('/api/novedades', novedadRoutes);
+app.use('/api/reservas', reservaRoutes);
 
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => {

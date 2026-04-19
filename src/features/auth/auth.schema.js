@@ -5,6 +5,7 @@
  * Estructura compatible con la BD Python existente
  */
 const mongoose = require('mongoose');
+const { z } = require('zod');
 
 const ROLES = {
   ADMIN: 'admin_programacion',
@@ -84,4 +85,13 @@ const usuarioSchema = new mongoose.Schema(
 
 const Usuario = mongoose.model('Usuario', usuarioSchema);
 
-module.exports = { Usuario, ROLES };
+const passwordSchema = z
+  .string()
+  .min(8, 'La contraseña debe tener al menos 8 caracteres')
+  .max(72, 'La contraseña no puede exceder 72 caracteres')
+  .regex(/[A-Z]/, 'Debe contener al menos una letra mayúscula')
+  .regex(/[a-z]/, 'Debe contener al menos una letra minúscula')
+  .regex(/[0-9]/, 'Debe contener al menos un número')
+  .regex(/[!@#$%^&*(),.?":{}|<>\-_=+\[\]\\/~`]/, 'Debe contener al menos un carácter especial');
+
+module.exports = { Usuario, ROLES, passwordSchema };

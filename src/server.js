@@ -9,6 +9,7 @@ const app = require('./app');
 const mongoClient = require('./shared/db/mongo.client');
 const nfcGateway = require('./shared/websocket/nfc.gateway');
 const ubicacionService = require('./features/ubicaciones/ubicacion.service');
+const notificacionScheduler = require('./features/notificaciones/notificacion.scheduler');
 
 const PORT = process.env.PORT || 3001;
 const CLIENT_ORIGIN = process.env.CLIENT_URL || 'http://localhost:5173';
@@ -40,6 +41,9 @@ async function bootstrap() {
 
   // 3. Iniciar gateway NFC
   await nfcGateway.start(io);
+
+  // 3.5 Iniciar scheduler de notificaciones automáticas
+  notificacionScheduler.iniciar();
 
   // 4. Escuchar
   httpServer.listen(PORT, () => {

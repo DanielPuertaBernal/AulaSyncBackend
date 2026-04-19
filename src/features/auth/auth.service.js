@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const ApiError = require('../../shared/errors/api.error');
 const authRepository = require('./auth.repository');
 const usuarioRepository = require('../usuarios/usuario.repository');
+const { passwordSchema } = require('./auth.schema');
 const { createLogger } = require('../../shared/utils/logger');
 
 const logger = createLogger('Auth');
@@ -113,8 +114,10 @@ class AuthService {
    * @returns {Promise<string>}
    */
   async hashPassword(password) {
-    if (!password || password.length < 6) {
-      throw ApiError.badRequest('Contraseña debe tener al menos 6 caracteres');
+    const result = passwordSchema.safeParse(password);
+    if (!result.success) {
+      const errors = result.error.errors.map((e) => e.message);
+      throw ApiError.badRequest(`Contraseña inválida: ${errors.join('. ')}`);
     }
     return bcrypt.hash(password, SALT_ROUNDS);
   }
