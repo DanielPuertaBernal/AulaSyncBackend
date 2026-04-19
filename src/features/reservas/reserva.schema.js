@@ -1,0 +1,36 @@
+'use strict';
+const mongoose = require('mongoose');
+
+const reservaSchema = new mongoose.Schema(
+  {
+    solicitante_documento: { type: String, required: true, index: true },
+    solicitante_nombre: { type: String, required: true },
+    nombre_bloque: { type: String, required: true, index: true },
+    nombre_salon: { type: String, required: true, index: true },
+    fecha: { type: Date, required: true, index: true },
+    hora_inicio: { type: String, required: true },
+    hora_fin: { type: String, required: true },
+    motivo: { type: String, default: '' },
+    estado: {
+      type: String,
+      enum: ['pendiente', 'aprobada', 'rechazada', 'cancelada', 'completada'],
+      default: 'pendiente',
+      index: true,
+    },
+    aprobado_por: { type: String, default: '' },
+    creado_por_rol: { type: String, default: '' },
+  },
+  {
+    collection: 'reservas',
+    versionKey: false,
+    timestamps: true,
+  }
+);
+
+reservaSchema.index(
+  { nombre_salon: 1, fecha: 1, hora_inicio: 1 },
+  { unique: true, partialFilterExpression: { estado: { $in: ['pendiente', 'aprobada'] } } }
+);
+
+const Reserva = mongoose.model('Reserva', reservaSchema);
+module.exports = { Reserva };
