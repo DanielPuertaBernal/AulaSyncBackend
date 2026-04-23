@@ -1,5 +1,6 @@
 'use strict';
 const llaveService = require('./llave.service');
+const novedadService = require('../novedades/novedad.service');
 const { parsePagination } = require('../../shared/utils/pagination.helper');
 
 class LlaveController {
@@ -65,6 +66,21 @@ class LlaveController {
   /** PATCH /api/llaves/devolver/:documento */
   async devolver(req, res) {
     const result = await llaveService.registrarDevolucion(req.params.documento, req.body?.ubicacion);
+
+    // Si se reportó una novedad junto con la devolución, crearla
+    if (req.body?.novedad && req.body.novedad.categoria) {
+      await novedadService.registrar({
+        tipo_recurso: 'llave',
+        recurso_id: result.registro?._id || result.registro?.id,
+        prestamo_ref: result.registro?._id || result.registro?.id,
+        reportado_por: req.user?.id,
+        reportado_por_nombre: req.user?.nombre || 'Auxiliar',
+        salon: result.registro?.salon || result.registro?.nombre_salon || '',
+        categoria: req.body.novedad.categoria,
+        descripcion: req.body.novedad.descripcion || '',
+      });
+    }
+
     return res.json({ ok: true, message: result.mensaje, data: { registro: result.registro } });
   }
 

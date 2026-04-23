@@ -98,4 +98,63 @@ router.get(
   (req, res) => notificacionController.historial(req, res)
 );
 
+/**
+ * @openapi
+ * /notificaciones/estadisticas:
+ *   get:
+ *     tags: [Notificaciones]
+ *     summary: Estadísticas de notificaciones agrupadas por estado y tipo (solo admin)
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Estadísticas de notificaciones
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       401:
+ *         $ref: '#/components/responses/NoAutenticado'
+ *       403:
+ *         $ref: '#/components/responses/NoAutorizado'
+ */
+router.get(
+  '/estadisticas',
+  ...requireAdmin,
+  (req, res) => notificacionController.estadisticas(req, res)
+);
+
+/**
+ * @openapi
+ * /notificaciones/reenviar/{id}:
+ *   post:
+ *     tags: [Notificaciones]
+ *     summary: Reenviar una notificación fallida por su ID
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Notificación reenviada correctamente
+ *       401:
+ *         $ref: '#/components/responses/NoAutenticado'
+ *       404:
+ *         $ref: '#/components/responses/NoEncontrado'
+ */
+router.post(
+  '/reenviar/:id',
+  ...requireAuth,
+  (req, res) => notificacionController.reenviar(req, res)
+);
+
 module.exports = router;

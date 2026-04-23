@@ -41,12 +41,8 @@ function formatRegistroLlave(registro) {
   return toClientFormat(registro, LIMITE_HORAS_DEMORA);
 }
 
-async function normalizarUbicacionPrestamo(ubicacion = UBICACION_OFICINA) {
-  return ubicacionService.validarOperacion(ubicacion, OPERACIONES_UBICACION.PRESTAMO_LLAVES);
-}
-
-async function normalizarUbicacionDevolucion(ubicacion = UBICACION_OFICINA) {
-  return ubicacionService.validarOperacion(ubicacion, OPERACIONES_UBICACION.DEVOLUCION_LLAVES);
+async function normalizarUbicacion(operacion, ubicacion = UBICACION_OFICINA) {
+  return ubicacionService.validarOperacion(ubicacion, operacion);
 }
 
 class LlaveService {
@@ -58,8 +54,8 @@ class LlaveService {
       findPendienteByDocumento: (documento) => llaveRepository.findPendienteByDocumento(documento),
       findDocenteByDocumento: (documento) => comunidadRepository.findByDocumento(documento),
       createRegistro: (registro) => llaveRepository.create(registro),
-      normalizarUbicacionPrestamo,
-      normalizarUbicacionDevolucion,
+      normalizarUbicacionPrestamo: (loc) => normalizarUbicacion(OPERACIONES_UBICACION.PRESTAMO_LLAVES, loc),
+      normalizarUbicacionDevolucion: (loc) => normalizarUbicacion(OPERACIONES_UBICACION.DEVOLUCION_LLAVES, loc),
       persistirPrestamo: (payload) => persistirPrestamo({
         llaveRepository,
         ...payload,
@@ -79,11 +75,7 @@ class LlaveService {
     });
   }
 
-  async obtenerPendientes() {
-    const raw = await llaveRepository.findPendientes();
-    const pendientes = await formatearPendientes(raw, formatRegistroLlave);
-
-    // Enrich with docente email
+  async #enriquecerConCorreos(pendientes) {
     const documentos = [...new Set(pendientes.map((p) => p.documento).filter(Boolean))];
     const correoMap = new Map();
     for (const doc of documentos) {
@@ -93,17 +85,15 @@ class LlaveService {
     return pendientes.map((p) => ({ ...p, correo: correoMap.get(p.documento) || '' }));
   }
 
+  async obtenerPendientes() {
+    const raw = await llaveRepository.findPendientes();
+    const pendientes = await formatearPendientes(raw, formatRegistroLlave);
+    return this.#enriquecerConCorreos(pendientes);
+  }
+
   async obtenerTodosPendientes() {
     const raw = await llaveRepository.findPendientes();
-    const todos = raw.map((r) => formatRegistroLlave(r));
-
-    const documentos = [...new Set(todos.map((p) => p.documento).filter(Boolean))];
-    const correoMap = new Map();
-    for (const doc of documentos) {
-      const docente = await comunidadRepository.findByDocumento(doc);
-      if (docente?.correo) correoMap.set(doc, docente.correo);
-    }
-    return todos.map((p) => ({ ...p, correo: correoMap.get(p.documento) || '' }));
+    return this.#enriquecerConCorreos(raw.map(formatRegistroLlave));
   }
 
   async obtenerPendientesHoy() {

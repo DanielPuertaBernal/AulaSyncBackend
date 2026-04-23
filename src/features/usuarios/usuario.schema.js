@@ -2,5 +2,5 @@
 /**
  * Usuario Schema - Mongoose (re-exporta el de auth para no duplicar)
  */
-const { Usuario, ROLES } = require('../auth/auth.schema');
-module.exports = { Usuario, ROLES };
+const { Usuario, ROLES, passwordSchema } = require('../auth/auth.schema');
+module.exports = { Usuario, ROLES, passwordSchema };

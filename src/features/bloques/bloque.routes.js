@@ -2,7 +2,7 @@
 const { Router } = require('express');
 const { z } = require('zod');
 const bloqueController = require('./bloque.controller');
-const { requireAdmin } = require('../auth/auth.middleware');
+const { requireAdmin, requireAuth } = require('../auth/auth.middleware');
 const { validate } = require('../../shared/middlewares/validate.middleware');
 
 const router = Router();
@@ -41,7 +41,7 @@ const actualizarSchema = z.object({
  *                       items:
  *                         $ref: '#/components/schemas/Bloque'
  */
-router.get('/', ...requireAdmin, (req, res) => bloqueController.listar(req, res));
+router.get('/', ...requireAuth, (req, res) => bloqueController.listar(req, res));
 
 /**
  * @openapi
