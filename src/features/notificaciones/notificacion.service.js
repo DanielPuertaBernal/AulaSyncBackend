@@ -174,7 +174,20 @@ class NotificacionService {
 
         if (!config.notificaciones_activas) continue;
 
-        const minutosTranscurridos = (ahora - new Date(prestamo.fecha_hora_entrega)) / (1000 * 60);
+        const partes = (prestamo.horario || '').toUpperCase().split(' A ');
+        const horaFinStr = partes.length >= 2 ? partes[1].trim() : null;
+        let finClase;
+        if (horaFinStr) {
+          const [h, m] = horaFinStr.split(':').map(Number);
+          if (!Number.isNaN(h) && !Number.isNaN(m)) {
+            finClase = new Date(prestamo.fecha_hora_entrega);
+            finClase.setHours(h, m, 0, 0);
+          }
+        }
+        if (!finClase) finClase = new Date(prestamo.fecha_hora_entrega);
+
+        const minutosTranscurridos = (ahora - finClase) / (1000 * 60);
+        if (minutosTranscurridos < 0) continue;
         if (minutosTranscurridos <= config.tiempo_maximo_prestamo_minutos) continue;
 
         // Buscar correo del docente en comunidad
