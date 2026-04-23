@@ -55,6 +55,15 @@ class ReservaController {
     const data = await reservaService.disponibilidad(nombre_salon, fecha);
     return res.json({ ok: true, data });
   }
+
+  async disponibilidadSmart(req, res) {
+    const { nombre_salon, fecha } = req.query;
+    if (!nombre_salon || !fecha) {
+      return res.status(400).json({ ok: false, message: 'nombre_salon y fecha son requeridos' });
+    }
+    const data = await reservaService.disponibilidadSmart(nombre_salon, fecha);
+    return res.json({ ok: true, data });
+  }
 }
 
 module.exports = new ReservaController();

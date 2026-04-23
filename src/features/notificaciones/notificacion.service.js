@@ -126,11 +126,12 @@ class NotificacionService {
     }
 
     try {
+      const fechaRef = notif.fecha_hora_prestamo || notif.fecha_envio;
       const htmlContent = devolucionLlaveTemplate({
         nombreDocente: notif.destinatario_nombre,
         salon: notif.salon,
-        fechaPrestamo: formatearFecha(notif.fecha_envio),
-        tiempoTranscurrido: '',
+        fechaPrestamo: formatearFecha(fechaRef),
+        tiempoTranscurrido: calcularTiempoTranscurrido(fechaRef),
       });
 
       await sendEmail({
@@ -247,8 +248,9 @@ class NotificacionService {
 
     for (const notif of items) {
       try {
-        const tiempoTranscurrido = calcularTiempoTranscurrido(notif.fecha_envio);
-        const fechaFormateada = formatearFecha(notif.fecha_envio);
+        const fechaRef = notif.fecha_hora_prestamo || notif.fecha_envio;
+        const tiempoTranscurrido = calcularTiempoTranscurrido(fechaRef);
+        const fechaFormateada = formatearFecha(fechaRef);
         let htmlContent;
 
         if (notif.tipo_notificacion === 'recordatorio' || notif.tipo_notificacion === 'vencimiento_inicial') {
@@ -318,7 +320,6 @@ class NotificacionService {
   }
 
   _construirNotificacionAutomatica(prestamo, persona, config, tipo, numero, minutosTranscurridos) {
-    const tiempoTranscurrido = calcularTiempoTranscurrido(prestamo.fecha_hora_entrega);
     return {
       destinatario_nombre: prestamo.docente || persona.nombre,
       destinatario_documento: prestamo.numero_documento,
@@ -334,6 +335,7 @@ class NotificacionService {
       estado_envio: 'pendiente',
       enviado_por: 'sistema',
       fecha_envio: new Date(),
+      fecha_hora_prestamo: prestamo.fecha_hora_entrega || null,
     };
   }
 }

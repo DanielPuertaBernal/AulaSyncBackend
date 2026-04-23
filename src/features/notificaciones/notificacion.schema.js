@@ -32,6 +32,7 @@ const notificacionSchema = new mongoose.Schema(
     error_envio: { type: String, default: '' },
     enviado_por: { type: String, default: '' },
     fecha_envio: { type: Date, default: Date.now },
+    fecha_hora_prestamo: { type: Date, default: null },
   },
   {
     collection: 'notificaciones',

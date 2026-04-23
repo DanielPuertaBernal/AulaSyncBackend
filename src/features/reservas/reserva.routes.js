@@ -16,6 +16,9 @@ const crearReservaSchema = z.object({
   hora_inicio: z.string().regex(/^\d{2}:\d{2}$/, 'Hora debe ser HH:MM'),
   hora_fin: z.string().regex(/^\d{2}:\d{2}$/, 'Hora debe ser HH:MM'),
   motivo: z.string().max(500).optional().default(''),
+  tipo_solicitante: z.enum(['docente', 'estudiante']).optional().default('docente'),
+  responsable_documento: z.string().optional().default(''),
+  responsable_nombre: z.string().optional().default(''),
 });
 
 const validarReservaSchema = z.object({
@@ -203,6 +206,12 @@ router.get(
   '/disponibilidad',
   ...requireAuth,
   (req, res) => reservaController.disponibilidad(req, res)
+);
+
+router.get(
+  '/disponibilidad-smart',
+  ...requireAuth,
+  (req, res) => reservaController.disponibilidadSmart(req, res)
 );
 
 /**

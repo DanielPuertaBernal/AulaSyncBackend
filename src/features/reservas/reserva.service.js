@@ -1,6 +1,7 @@
 'use strict';
 const reservaRepository = require('./reserva.repository');
 const { Programacion } = require('../programacion/programacion.schema');
+const { Llave } = require('../llaves/llave.schema');
 const { createLogger } = require('../../shared/utils/logger');
 
 const logger = createLogger('Reservas');
@@ -140,6 +141,54 @@ class ReservaService {
       const resConflicto = reservas.find((r) =>
         r.hora_inicio < nextSlot && r.hora_fin > slot
       );
+      if (resConflicto) {
+        return { hora: slot, disponible: false, motivo: 'reserva', detalle: resConflicto.solicitante_nombre };
+      }
+
+      return { hora: slot, disponible: true };
+    });
+
+    return { nombre_salon, fecha, slots };
+  }
+
+  async disponibilidadSmart(nombre_salon, fecha) {
+    const reservas = await reservaRepository.findBySalonYFecha(nombre_salon, fecha);
+
+    const diaMap = { 0: 'DOMINGO', 1: 'LUNES', 2: 'MARTES', 3: 'MIERCOLES', 4: 'JUEVES', 5: 'VIERNES', 6: 'SABADO' };
+    const fechaObj = new Date(`${fecha}T12:00:00`);
+    const diaSemana = diaMap[fechaObj.getDay()] || '';
+
+    let progAcademica = [];
+    if (diaSemana) {
+      progAcademica = await Programacion.find({
+        aula: nombre_salon,
+        dia: new RegExp(diaSemana, 'i'),
+      }).lean();
+    }
+
+    // Check for an active key loan in this salon on this date
+    const startOfDay = new Date(`${fecha}T00:00:00`);
+    const endOfDay = new Date(`${fecha}T23:59:59`);
+    const llaveActiva = await Llave.findOne({
+      aula: nombre_salon,
+      estado: 'en_prestamo',
+      fecha_hora_entrega: { $gte: startOfDay, $lte: endOfDay },
+    }).lean();
+
+    const slots = SLOTS.map((slot) => {
+      const nextSlot = this._nextSlot(slot);
+
+      const progConflicto = progAcademica.find((p) =>
+        p.hora_inicio && p.hora_fin && p.hora_inicio < nextSlot && p.hora_fin > slot
+      );
+      if (progConflicto) {
+        if (llaveActiva) {
+          return { hora: slot, disponible: false, motivo: 'programacion_con_llave', detalle: 'Salón en uso — llave prestada' };
+        }
+        return { hora: slot, disponible: true, motivo: 'programacion_sin_llave', detalle: progConflicto.materia || 'Clase programada sin llave reclamada' };
+      }
+
+      const resConflicto = reservas.find((r) => r.hora_inicio < nextSlot && r.hora_fin > slot);
       if (resConflicto) {
         return { hora: slot, disponible: false, motivo: 'reserva', detalle: resConflicto.solicitante_nombre };
       }
