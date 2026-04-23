@@ -1,5 +1,6 @@
 'use strict';
 const llaveService = require('./llave.service');
+const novedadService = require('../novedades/novedad.service');
 const { parsePagination } = require('../../shared/utils/pagination.helper');
 
 class LlaveController {
@@ -68,7 +69,6 @@ class LlaveController {
 
     // Si se reportó una novedad junto con la devolución, crearla
     if (req.body?.novedad && req.body.novedad.categoria) {
-      const novedadService = require('../novedades/novedad.service');
       await novedadService.registrar({
         tipo_recurso: 'llave',
         recurso_id: result.registro?._id || result.registro?.id,
