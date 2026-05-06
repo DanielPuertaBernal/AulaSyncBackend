@@ -220,6 +220,7 @@ function construirRegistroPrestamo({
   reclamaInfo = {},
   tipoEntrega = 'carnet',
   ubicacionPrestamo,
+  origenRegistro = 'programacion',
 }) {
   return {
     numero_documento: normalizarDocumento(docente?.numero_documento),
@@ -238,7 +239,7 @@ function construirRegistroPrestamo({
     tiempo_retraso_devolucion: '',
     tipo_entrega: tipoEntrega,
     tipo_devolucion: '',
-    origen_registro: 'programacion',
+    origen_registro: origenRegistro,
     ubicacion_prestamo: ubicacionPrestamo,
     ubicacion_devolucion: '',
     quien_reclama: reclamaInfo.quien || 'docente',

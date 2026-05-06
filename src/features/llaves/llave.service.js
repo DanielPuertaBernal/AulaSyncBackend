@@ -29,6 +29,7 @@ const {
   UBICACIONES: { OFICINA: UBICACION_OFICINA },
   OPERACIONES_UBICACION,
 } = require('../../shared/constants/nfc.constants');
+const reservaRepository = require('../reservas/reserva.repository');
 
 const LIMITE_HORAS_DEMORA = 4;
 const logger = createLogger('Llaves');
@@ -52,6 +53,9 @@ class LlaveService {
       resolverContextoNFC,
       buscarClaseParaConfirmacion,
       findPendienteByDocumento: (documento) => llaveRepository.findPendienteByDocumento(documento),
+      findReservaPendienteNFCByDocumento: (documento, now) => reservaRepository.findReservaPendienteNFCByDocumento(documento, now),
+      findReservaById: (id) => reservaRepository.findById(id),
+      marcarReservaCheckinNFC: (payload) => reservaRepository.marcarCheckinNFC(payload),
       findDocenteByDocumento: (documento) => comunidadRepository.findByDocumento(documento),
       createRegistro: (registro) => llaveRepository.create(registro),
       normalizarUbicacionPrestamo: (loc) => normalizarUbicacion(OPERACIONES_UBICACION.PRESTAMO_LLAVES, loc),

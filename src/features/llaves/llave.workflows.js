@@ -26,6 +26,9 @@ function createLlaveWorkflows({
   resolverContextoNFC,
   buscarClaseParaConfirmacion,
   findPendienteByDocumento,
+  findReservaPendienteNFCByDocumento,
+  findReservaById,
+  marcarReservaCheckinNFC,
   findDocenteByDocumento,
   createRegistro,
   normalizarUbicacionPrestamo,
@@ -35,6 +38,22 @@ function createLlaveWorkflows({
   validarEntregaManual,
   normalizarOrigenRegistro,
 }) {
+  function construirClaseDesdeReserva(reserva) {
+    return {
+      aula: reserva.nombre_salon,
+      horario: `${reserva.hora_inicio} A ${reserva.hora_fin}`,
+      materia: reserva.motivo || 'Reserva de salón',
+      facultad: 'Reserva',
+      dia: reserva.nombre_bloque || '',
+    };
+  }
+
+  function resolverEstadoCheckinReserva({ anticipado, tiempoRetraso }) {
+    if (anticipado) return 'nfc_anticipado';
+    if (tiempoRetraso) return 'nfc_retraso';
+    return 'nfc_en_tiempo';
+  }
+
   /** Procesa la devolución de una llave a partir del contexto NFC. */
   async function resolverResultadoDevolucion({ contexto, persona, documento, ubicacion }) {
     try {
@@ -67,24 +86,70 @@ function createLlaveWorkflows({
       return construirResultadoError({ contexto, persona, mensaje: err.message });
     }
 
-    if (!contexto.clasesDisponibles.length) {
-      return construirResultadoSinClase({
-        contexto,
-        persona,
-        mensaje: contexto.mensajeSinClase || 'No hay clases disponibles',
-      });
-    }
-
     const ahora = new Date();
     const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
     const claseTarget = encontrarClaseActual(contexto.clasesDisponibles, minutosAhora);
+    const reservaPendiente = await findReservaPendienteNFCByDocumento(documento, ahora);
 
-    if (!claseTarget) {
+    if (!claseTarget && !reservaPendiente) {
       return construirResultadoSinClase({
         contexto,
         persona,
-        mensaje: 'No hay clases en el horario actual o próximo',
+        mensaje: contexto.mensajeSinClase || 'No hay clases o reservas disponibles en el horario actual o próximo',
       });
+    }
+
+    // Regla de prioridad solicitada: si hay clase y reserva al tiempo, primero se procesa clase.
+    if (!claseTarget && reservaPendiente) {
+      const claseReserva = construirClaseDesdeReserva(reservaPendiente);
+      const anticipado = esReclamoAnticipado(claseReserva.horario, ahora);
+      const tiempoRetraso = calcularTiempoRetraso(claseReserva.horario, ahora);
+      const seReclamoATiempo = !tiempoRetraso;
+
+      if (anticipado) {
+        return {
+          ...construirResultadoAnticipado({ contexto, persona, clase: claseReserva }),
+          reserva: { id: String(reservaPendiente._id) },
+        };
+      }
+
+      const registro = await persistirPrestamo({
+        docente: {
+          numero_documento: reservaPendiente.solicitante_documento,
+          nombre: reservaPendiente.solicitante_nombre,
+        },
+        clase: claseReserva,
+        seReclamoATiempo,
+        tiempoRetraso,
+        reclamaInfo: {
+          quien: contexto.rol,
+          documento,
+          nombre: persona.nombre,
+        },
+        tipoEntrega: 'carnet',
+        ubicacionPrestamo,
+        origenRegistro: 'individual',
+      });
+
+      await marcarReservaCheckinNFC({
+        reservaId: reservaPendiente._id,
+        llavePrestamoId: registro._id,
+        checkinEstado: resolverEstadoCheckinReserva({ anticipado: false, tiempoRetraso }),
+        now: ahora,
+      });
+
+      return {
+        ...construirResultadoPrestamo({
+          contexto,
+          persona,
+          clase: claseReserva,
+          registro,
+          ubicacion: ubicacionPrestamo,
+          seReclamoATiempo,
+          tiempoRetraso,
+        }),
+        reserva: { id: String(reservaPendiente._id) },
+      };
     }
 
     const anticipado = esReclamoAnticipado(claseTarget.horario, ahora);
@@ -107,6 +172,7 @@ function createLlaveWorkflows({
       },
       tipoEntrega: 'carnet',
       ubicacionPrestamo,
+      origenRegistro: 'programacion',
     });
 
     return construirResultadoPrestamo({
@@ -147,6 +213,7 @@ function createLlaveWorkflows({
     id_carnet,
     horario,
     aula,
+    reserva_id,
     rol,
     documento_persona,
     nombre_persona,
@@ -158,12 +225,33 @@ function createLlaveWorkflows({
       throw ApiError.notFound('Persona no encontrada');
     }
 
-    const { clase, docenteDoc } = await buscarClaseParaConfirmacion({
-      persona,
-      aula,
-      horario,
-      rol,
-    });
+    let clase;
+    let docenteDoc;
+
+    if (reserva_id) {
+      const reserva = await findReservaById(reserva_id);
+      if (!reserva) {
+        throw ApiError.notFound('Reserva no encontrada para confirmar préstamo anticipado');
+      }
+      if (reserva.entregar_llave !== false) {
+        throw ApiError.badRequest('La reserva seleccionada no requiere reclamación NFC');
+      }
+      if (reserva.llave_entregada) {
+        throw ApiError.conflict('La llave de esta reserva ya fue entregada');
+      }
+
+      clase = construirClaseDesdeReserva(reserva);
+      docenteDoc = normalizarDocumento(reserva.solicitante_documento);
+    } else {
+      const match = await buscarClaseParaConfirmacion({
+        persona,
+        aula,
+        horario,
+        rol,
+      });
+      clase = match.clase;
+      docenteDoc = match.docenteDoc;
+    }
 
     if (!clase) {
       throw ApiError.notFound('Clase no encontrada en la programación');
@@ -185,9 +273,19 @@ function createLlaveWorkflows({
         documento: documento_persona || docenteDoc,
         nombre: nombre_persona || persona.nombre,
       },
-      tipoEntrega: 'manual',
+      tipoEntrega: 'carnet',
       ubicacionPrestamo,
+      origenRegistro: reserva_id ? 'individual' : 'programacion',
     });
+
+    if (reserva_id) {
+      await marcarReservaCheckinNFC({
+        reservaId: reserva_id,
+        llavePrestamoId: registro._id,
+        checkinEstado: 'nfc_anticipado',
+        now: new Date(),
+      });
+    }
 
     return {
       ok: true,

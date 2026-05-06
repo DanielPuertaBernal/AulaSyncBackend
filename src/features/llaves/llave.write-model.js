@@ -30,6 +30,7 @@ async function persistirPrestamo({
   reclamaInfo = {},
   tipoEntrega = 'carnet',
   ubicacionPrestamo,
+  origenRegistro = 'programacion',
   toClientFormat,
   toPlain,
 }) {
@@ -41,6 +42,7 @@ async function persistirPrestamo({
     reclamaInfo,
     tipoEntrega,
     ubicacionPrestamo,
+    origenRegistro,
   });
 
   const created = await llaveRepository.create(registro);
