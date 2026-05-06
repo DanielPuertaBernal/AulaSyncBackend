@@ -21,6 +21,23 @@ const crearReservaSchema = z.object({
   responsable_nombre: z.string().optional().default(''),
   entregar_llave: z.boolean().optional().default(true),
   forzar: z.boolean().optional().default(false),
+}).superRefine((val, ctx) => {
+  if (val.tipo_solicitante === 'estudiante') {
+    if (!String(val.responsable_documento || '').trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['responsable_documento'],
+        message: 'Documento/NFC del profesor responsable requerido para solicitante estudiante',
+      });
+    }
+    if (!String(val.responsable_nombre || '').trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['responsable_nombre'],
+        message: 'Nombre del profesor responsable requerido para solicitante estudiante',
+      });
+    }
+  }
 });
 
 const validarReservaSchema = z.object({

@@ -3,9 +3,13 @@ const reservaRepository = require('./reserva.repository');
 const { Programacion } = require('../programacion/programacion.schema');
 const { Llave } = require('../llaves/llave.schema');
 const { Reserva } = require('./reserva.schema');
+const {
+  UBICACIONES: { OFICINA: UBICACION_OFICINA },
+} = require('../../shared/constants/nfc.constants');
 const { createLogger } = require('../../shared/utils/logger');
 
 const DIAS_ES = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
+const ZONA_HORARIA_APP = 'America/Bogota';
 
 const logger = createLogger('Reservas');
 
@@ -82,19 +86,29 @@ class ReservaService {
     if (datos.entregar_llave !== false) {
       const fechaObj = new Date(`${datos.fecha}T12:00:00`);
       const dia = DIAS_ES[fechaObj.getDay()] || '';
+      const ahora = new Date();
+      const responsableEsValido = datos.tipo_solicitante === 'estudiante'
+        && String(datos.responsable_documento || '').trim()
+        && String(datos.responsable_nombre || '').trim();
+      const documentoReclama = responsableEsValido ? datos.responsable_documento : datos.solicitante_documento;
+      const nombreReclama = responsableEsValido ? datos.responsable_nombre : datos.solicitante_nombre;
+      const quienReclama = responsableEsValido ? 'docente' : (datos.tipo_solicitante === 'estudiante' ? 'monitor' : 'docente');
+
       const prestamo = await Llave.create({
         numero_documento: datos.solicitante_documento,
         docente: datos.solicitante_nombre,
         aula: datos.nombre_salon,
         horario: `${datos.hora_inicio} A ${datos.hora_fin}`,
         dia,
-        fecha_hora_entrega: new Date(`${datos.fecha}T${datos.hora_inicio}:00`),
+        fecha_hora_entrega: ahora,
+        se_reclamo_a_tiempo: true,
         estado: 'en_prestamo',
         tipo_entrega: 'manual',
         origen_registro: 'individual',
-        quien_reclama: datos.tipo_solicitante === 'estudiante' ? 'monitor' : 'docente',
-        numero_documento_reclama: datos.solicitante_documento,
-        nombre_reclama: datos.solicitante_nombre,
+        ubicacion_prestamo: UBICACION_OFICINA,
+        quien_reclama: quienReclama,
+        numero_documento_reclama: documentoReclama,
+        nombre_reclama: nombreReclama,
       });
       await Reserva.updateOne(
         { _id: reserva._id },
@@ -125,7 +139,12 @@ class ReservaService {
 
   async sincronizarEstadosVencidos() {
     const now = new Date();
-    const hoy = now.toISOString().split('T')[0];
+    const hoy = now.toLocaleDateString('en-CA', {
+      timeZone: ZONA_HORARIA_APP,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
     const horaActual = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     await reservaRepository.bulkCompletarVencidas(hoy, horaActual);
   }
@@ -159,7 +178,23 @@ class ReservaService {
       const ApiError = require('../../shared/errors/api.error');
       throw ApiError.badRequest(`No se puede cancelar una reserva en estado "${reserva.estado}"`);
     }
-    return reservaRepository.updateById(id, { estado: 'cancelada' });
+
+    const fechaHoraInicio = this._fechaHoraInicioReserva(reserva);
+    if (!fechaHoraInicio || new Date() >= fechaHoraInicio) {
+      const ApiError = require('../../shared/errors/api.error');
+      throw ApiError.badRequest('Solo se puede cancelar una reserva antes de su hora de inicio');
+    }
+
+    let devolucionAutomaticaRegistrada = false;
+    if (reserva.llave_entregada) {
+      devolucionAutomaticaRegistrada = await this._registrarDevolucionAutomaticaPorCancelacion(reserva);
+    }
+
+    const actualizada = await reservaRepository.updateById(id, { estado: 'cancelada' });
+    return {
+      ...actualizada,
+      devolucion_automatica_registrada: devolucionAutomaticaRegistrada,
+    };
   }
 
   async disponibilidad(nombre_salon, fecha) {
@@ -275,6 +310,73 @@ class ReservaService {
     const [h, m] = slot.split(':').map(Number);
     if (m === 0) return `${String(h).padStart(2, '0')}:30`;
     return `${String(h + 1).padStart(2, '0')}:00`;
+  }
+
+  _calcularDuracion(fechaInicio, fechaFin = new Date()) {
+    const inicio = fechaInicio instanceof Date ? fechaInicio : new Date(fechaInicio);
+    if (Number.isNaN(inicio.getTime())) return '';
+
+    const diffMs = Math.max(0, fechaFin - inicio);
+    const horas = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutos = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    return `${horas}h ${minutos}min`;
+  }
+
+  async _registrarDevolucionAutomaticaPorCancelacion(reserva) {
+    const ahora = new Date();
+
+    let prestamo = null;
+    if (reserva.llave_prestamo_id) {
+      prestamo = await Llave.findById(reserva.llave_prestamo_id).lean();
+    }
+
+    if (!prestamo) {
+      const fechaRef = new Date(reserva.fecha);
+      const diaStart = new Date(fechaRef); diaStart.setHours(0, 0, 0, 0);
+      const diaEnd = new Date(fechaRef); diaEnd.setHours(23, 59, 59, 999);
+      prestamo = await Llave.findOne({
+        aula: reserva.nombre_salon,
+        numero_documento: reserva.solicitante_documento,
+        fecha_hora_entrega: { $gte: diaStart, $lte: diaEnd },
+      }).sort({ fecha_hora_entrega: -1 }).lean();
+    }
+
+    if (!prestamo) return false;
+    if (prestamo.estado !== 'en_prestamo') return true;
+
+    await Llave.updateOne(
+      { _id: prestamo._id },
+      {
+        $set: {
+          fecha_hora_devolucion: ahora,
+          duracion: this._calcularDuracion(prestamo.fecha_hora_entrega, ahora),
+          tiempo_retraso_devolucion: '',
+          retraso_entrega: false,
+          estado: 'entregado',
+          tipo_devolucion: 'manual',
+          ubicacion_devolucion: UBICACION_OFICINA,
+          quien_entrega: 'docente',
+          numero_documento_entrega: reserva.solicitante_documento,
+          nombre_entrega: reserva.solicitante_nombre,
+        },
+      }
+    );
+
+    return true;
+  }
+
+  _fechaHoraInicioReserva(reserva) {
+    if (!reserva?.fecha || !reserva?.hora_inicio) return null;
+
+    const fecha = new Date(reserva.fecha);
+    if (Number.isNaN(fecha.getTime())) return null;
+
+    const yyyy = String(fecha.getUTCFullYear());
+    const mm = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(fecha.getUTCDate()).padStart(2, '0');
+    const fechaHora = new Date(`${yyyy}-${mm}-${dd}T${reserva.hora_inicio}:00`);
+
+    return Number.isNaN(fechaHora.getTime()) ? null : fechaHora;
   }
 
   async _obtener(id) {
