@@ -56,6 +56,15 @@ class ReservaController {
     return res.json({ ok: true, data });
   }
 
+  async salonesDisponibles(req, res) {
+    const { fecha, hora_inicio, hora_fin } = req.query;
+    if (!fecha || !hora_inicio || !hora_fin) {
+      return res.status(400).json({ ok: false, message: 'fecha, hora_inicio y hora_fin son requeridos' });
+    }
+    const data = await reservaService.salonesDisponibles(fecha, hora_inicio, hora_fin);
+    return res.json({ ok: true, data });
+  }
+
   async disponibilidadSmart(req, res) {
     const { nombre_salon, fecha } = req.query;
     if (!nombre_salon || !fecha) {

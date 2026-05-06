@@ -19,6 +19,8 @@ const crearReservaSchema = z.object({
   tipo_solicitante: z.enum(['docente', 'estudiante']).optional().default('docente'),
   responsable_documento: z.string().optional().default(''),
   responsable_nombre: z.string().optional().default(''),
+  entregar_llave: z.boolean().optional().default(true),
+  forzar: z.boolean().optional().default(false),
 });
 
 const validarReservaSchema = z.object({
@@ -212,6 +214,12 @@ router.get(
   '/disponibilidad-smart',
   ...requireAuth,
   (req, res) => reservaController.disponibilidadSmart(req, res)
+);
+
+router.get(
+  '/salones-disponibles',
+  ...requireAuth,
+  (req, res) => reservaController.salonesDisponibles(req, res)
 );
 
 /**

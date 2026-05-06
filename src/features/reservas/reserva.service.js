@@ -2,14 +2,17 @@
 const reservaRepository = require('./reserva.repository');
 const { Programacion } = require('../programacion/programacion.schema');
 const { Llave } = require('../llaves/llave.schema');
+const { Reserva } = require('./reserva.schema');
 const { createLogger } = require('../../shared/utils/logger');
+
+const DIAS_ES = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
 
 const logger = createLogger('Reservas');
 
 const SLOTS = [];
-for (let h = 7; h <= 21; h++) {
+for (let h = 7; h <= 22; h++) {
   SLOTS.push(`${String(h).padStart(2, '0')}:00`);
-  if (h < 21) SLOTS.push(`${String(h).padStart(2, '0')}:30`);
+  if (h < 22) SLOTS.push(`${String(h).padStart(2, '0')}:30`);
 }
 
 class ReservaService {
@@ -75,10 +78,60 @@ class ReservaService {
 
     const reserva = await reservaRepository.create(datos);
     logger.info('Reserva creada', { id: reserva._id, salon: datos.nombre_salon, fecha: datos.fecha });
+
+    if (datos.entregar_llave !== false) {
+      const fechaObj = new Date(`${datos.fecha}T12:00:00`);
+      const dia = DIAS_ES[fechaObj.getDay()] || '';
+      const prestamo = await Llave.create({
+        numero_documento: datos.solicitante_documento,
+        docente: datos.solicitante_nombre,
+        aula: datos.nombre_salon,
+        horario: `${datos.hora_inicio} A ${datos.hora_fin}`,
+        dia,
+        fecha_hora_entrega: new Date(`${datos.fecha}T${datos.hora_inicio}:00`),
+        estado: 'en_prestamo',
+        tipo_entrega: 'manual',
+        origen_registro: 'individual',
+        quien_reclama: datos.tipo_solicitante === 'estudiante' ? 'monitor' : 'docente',
+        numero_documento_reclama: datos.solicitante_documento,
+        nombre_reclama: datos.solicitante_nombre,
+      });
+      await Reserva.updateOne(
+        { _id: reserva._id },
+        {
+          $set: {
+            llave_entregada: true,
+            llave_prestamo_id: prestamo._id,
+            checkin_estado: 'entregado_oficina',
+            checkin_canal: 'oficina',
+            checkin_at: new Date(),
+          },
+        }
+      );
+      logger.info('Llave entregada al crear reserva', { salon: datos.nombre_salon });
+    } else {
+      await Reserva.updateOne(
+        { _id: reserva._id },
+        {
+          $set: {
+            checkin_estado: 'pendiente_nfc',
+          },
+        }
+      );
+    }
+
     return reserva;
   }
 
+  async sincronizarEstadosVencidos() {
+    const now = new Date();
+    const hoy = now.toISOString().split('T')[0];
+    const horaActual = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    await reservaRepository.bulkCompletarVencidas(hoy, horaActual);
+  }
+
   async listar(filters, pagination) {
+    await this.sincronizarEstadosVencidos();
     return reservaRepository.findHistorial(filters, pagination);
   }
 
@@ -197,6 +250,25 @@ class ReservaService {
     });
 
     return { nombre_salon, fecha, slots };
+  }
+
+  async salonesDisponibles(fecha, hora_inicio, hora_fin) {
+    const { Salon } = require('../salones/salon.schema');
+    const salones = await Salon.find().lean();
+
+    const results = await Promise.all(
+      salones.map(async (salon) => {
+        const conflictos = await this._buscarConflictos({
+          nombre_salon: salon.nombre_salon,
+          fecha,
+          hora_inicio,
+          hora_fin,
+        });
+        return { ...salon, disponible: conflictos.length === 0 };
+      })
+    );
+
+    return results.filter((s) => s.disponible);
   }
 
   _nextSlot(slot) {
