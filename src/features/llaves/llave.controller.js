@@ -2,6 +2,9 @@
 const llaveService = require('./llave.service');
 const novedadService = require('../novedades/novedad.service');
 const { parsePagination } = require('../../shared/utils/pagination.helper');
+const {
+  UBICACIONES: { OFICINA: UBICACION_OFICINA },
+} = require('../../shared/constants/nfc.constants');
 
 class LlaveController {
   /** GET /api/llaves/pendientes - Llaves pendientes agrupadas */
@@ -65,7 +68,7 @@ class LlaveController {
 
   /** PATCH /api/llaves/devolver/:documento */
   async devolver(req, res) {
-    const result = await llaveService.registrarDevolucion(req.params.documento, req.body?.ubicacion);
+    const result = await llaveService.registrarDevolucion(req.params.documento, UBICACION_OFICINA);
 
     // Si se reportó una novedad junto con la devolución, crearla
     if (req.body?.novedad && req.body.novedad.categoria) {
