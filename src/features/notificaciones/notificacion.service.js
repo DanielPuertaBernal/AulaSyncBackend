@@ -11,6 +11,9 @@ const {
 const {
   recordatorioDevolucionTemplate,
 } = require('../../shared/email/templates/recordatorio-devolucion.template');
+const {
+  reservaNoReclamadaTemplate,
+} = require('../../shared/email/templates/reserva-no-reclamada.template');
 const { createLogger } = require('../../shared/utils/logger');
 
 const logger = createLogger('Notificaciones');
@@ -266,14 +269,24 @@ class NotificacionService {
         const fechaFormateada = formatearFecha(fechaRef);
         let htmlContent;
 
-        if (notif.tipo_notificacion === 'recordatorio' || notif.tipo_notificacion === 'vencimiento_inicial') {
+        if (notif.tipo_notificacion === 'reserva_no_reclamada') {
+          htmlContent = reservaNoReclamadaTemplate({
+            nombreSolicitante: notif.destinatario_nombre,
+            salon: notif.salon,
+            fecha: notif.reserva_fecha || fechaFormateada,
+            horaInicio: notif.reserva_hora_inicio || '',
+            horaFin: notif.reserva_hora_fin || '',
+          });
+        } else if (notif.tipo_notificacion === 'recordatorio' || notif.tipo_notificacion === 'vencimiento_inicial') {
+          const bloque = this._extraerBloque(notif.salon || '');
+          const configBloque = await configuracionService.obtenerPorBloque(bloque);
           htmlContent = recordatorioDevolucionTemplate({
             nombreDocente: notif.destinatario_nombre,
             salon: notif.salon,
             fechaPrestamo: fechaFormateada,
             tiempoTranscurrido,
             numeroRecordatorio: notif.numero_recordatorio || 1,
-            tiempoLimiteMinutos: 120,
+            tiempoLimiteMinutos: configBloque.tiempo_maximo_prestamo_minutos,
           });
         } else {
           htmlContent = devolucionLlaveTemplate({

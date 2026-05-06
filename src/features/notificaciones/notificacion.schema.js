@@ -15,10 +15,11 @@ const notificacionSchema = new mongoose.Schema(
     mensaje: { type: String, default: '' },
     llave_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Llave', default: null },
     prestamo_llave_id: { type: mongoose.Schema.Types.ObjectId, default: null },
+    reserva_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Reserva', default: null },
     salon: { type: String, default: '' },
     tipo_notificacion: {
       type: String,
-      enum: ['manual', 'vencimiento_inicial', 'recordatorio'],
+      enum: ['manual', 'vencimiento_inicial', 'recordatorio', 'reserva_no_reclamada'],
       default: 'manual',
     },
     numero_recordatorio: { type: Number, default: 0 },
@@ -33,6 +34,9 @@ const notificacionSchema = new mongoose.Schema(
     enviado_por: { type: String, default: '' },
     fecha_envio: { type: Date, default: Date.now },
     fecha_hora_prestamo: { type: Date, default: null },
+    reserva_fecha: { type: String, default: '' },
+    reserva_hora_inicio: { type: String, default: '' },
+    reserva_hora_fin: { type: String, default: '' },
   },
   {
     collection: 'notificaciones',
@@ -45,6 +49,10 @@ notificacionSchema.index({ destinatario_documento: 1, fecha_envio: -1 });
 notificacionSchema.index({ estado_envio: 1, proximo_reintento: 1 });
 notificacionSchema.index(
   { prestamo_llave_id: 1, tipo_notificacion: 1, numero_recordatorio: 1 },
+  { unique: true, sparse: true }
+);
+notificacionSchema.index(
+  { reserva_id: 1, tipo_notificacion: 1 },
   { unique: true, sparse: true }
 );
 

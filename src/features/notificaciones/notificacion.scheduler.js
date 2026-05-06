@@ -1,6 +1,7 @@
 'use strict';
 const cron = require('node-cron');
 const notificacionService = require('./notificacion.service');
+const reservaService = require('../reservas/reserva.service');
 const { createLogger } = require('../../shared/utils/logger');
 
 const logger = createLogger('NotificacionScheduler');
@@ -17,6 +18,7 @@ function iniciar() {
   tareaActiva = cron.schedule('*/5 * * * *', async () => {
     try {
       logger.info('Iniciando ciclo de notificaciones automáticas');
+      await reservaService.sincronizarEstadosVencidos();
       const encolados = await notificacionService.verificarYEncolarNotificaciones();
       const enviados = await notificacionService.procesarColaNotificaciones();
       logger.info('Ciclo de notificaciones completado', { encolados, enviados });
