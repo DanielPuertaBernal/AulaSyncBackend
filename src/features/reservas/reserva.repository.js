@@ -2,9 +2,28 @@
 const { Reserva } = require('./reserva.schema');
 const { applyPagination } = require('../../shared/utils/pagination.helper');
 
+const ZONA_HORARIA_APP = 'America/Bogota';
+
+function fechaYmdBogota(fecha) {
+  if (!fecha) return '';
+  return new Date(fecha).toLocaleDateString('en-CA', {
+    timeZone: ZONA_HORARIA_APP,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+}
+
 class ReservaRepository {
   async create(data) {
-    return Reserva.create(data);
+    const payload = { ...data };
+
+    // Evita desfases de día por parseo UTC de fechas tipo YYYY-MM-DD.
+    if (typeof payload.fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(payload.fecha)) {
+      payload.fecha = new Date(`${payload.fecha}T12:00:00`);
+    }
+
+    return Reserva.create(payload);
   }
 
   async findById(id) {
@@ -42,18 +61,19 @@ class ReservaRepository {
    * Busca reservas activas que se solapen con el rango horario dado en un salón y fecha.
    */
   async findConflictos(nombre_salon, fecha, hora_inicio, hora_fin, excludeId = null) {
-    const start = new Date(`${fecha}T00:00:00`);
-    const end = new Date(`${fecha}T23:59:59.999`);
     const query = {
       nombre_salon,
-      fecha: { $gte: start, $lte: end },
       estado: { $in: ['pendiente', 'aprobada'] },
-      $or: [
-        { hora_inicio: { $lt: hora_fin }, hora_fin: { $gt: hora_inicio } },
-      ],
     };
     if (excludeId) query._id = { $ne: excludeId };
-    return Reserva.find(query).lean();
+
+    const candidatas = await Reserva.find(query).lean();
+    return candidatas.filter(
+      (r) =>
+        fechaYmdBogota(r.fecha) === fecha
+        && r.hora_inicio < hora_fin
+        && r.hora_fin > hora_inicio
+    );
   }
 
   /**
@@ -65,16 +85,14 @@ class ReservaRepository {
     const comunidadRepository = require('../comunidad/comunidad.repository');
     const configuracionService = require('../configuracion/configuracion.service');
 
-    const hoyStart = new Date(`${fechaHoy}T00:00:00`);
-    const hoyEnd = new Date(`${fechaHoy}T23:59:59.999`);
-
-    const vencidas = await Reserva.find({
+    const candidatas = await Reserva.find({
       estado: { $in: ['pendiente', 'aprobada'] },
-      $or: [
-        { fecha: { $lt: hoyStart } },
-        { fecha: { $gte: hoyStart, $lte: hoyEnd }, hora_fin: { $lte: horaActual } },
-      ],
     }).lean();
+
+    const vencidas = candidatas.filter((reserva) => {
+      const fechaReserva = fechaYmdBogota(reserva.fecha);
+      return fechaReserva < fechaHoy || (fechaReserva === fechaHoy && String(reserva.hora_fin || '') <= horaActual);
+    });
 
     for (const reserva of vencidas) {
       let nuevoEstado;
@@ -170,24 +188,22 @@ class ReservaRepository {
   }
 
   async findBySalonYFecha(nombre_salon, fecha) {
-    const start = new Date(`${fecha}T00:00:00`);
-    const end = new Date(`${fecha}T23:59:59.999`);
-    return Reserva.find({
+    const reservas = await Reserva.find({
       nombre_salon,
-      fecha: { $gte: start, $lte: end },
       estado: { $in: ['pendiente', 'aprobada'] },
-    }).sort({ hora_inicio: 1 }).lean();
+    }).lean();
+
+    return reservas
+      .filter((r) => fechaYmdBogota(r.fecha) === fecha)
+      .sort((a, b) => String(a.hora_inicio || '').localeCompare(String(b.hora_inicio || '')));
   }
 
   async findReservaPendienteNFCByDocumento(documento, now = new Date()) {
-    const fecha = now.toISOString().split('T')[0];
-    const start = new Date(`${fecha}T00:00:00`);
-    const end = new Date(`${fecha}T23:59:59.999`);
+    const fecha = fechaYmdBogota(now);
     const horaActual = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     const candidatas = await Reserva.find({
       solicitante_documento: documento,
-      fecha: { $gte: start, $lte: end },
       estado: { $in: ['pendiente', 'aprobada'] },
       entregar_llave: false,
       llave_entregada: false,
@@ -196,9 +212,13 @@ class ReservaRepository {
         { checkin_estado: { $exists: false } },
       ],
       hora_fin: { $gte: horaActual },
-    }).sort({ hora_inicio: 1 }).lean();
+    }).lean();
 
-    if (!candidatas.length) return null;
+    const candidatasFecha = candidatas
+      .filter((r) => fechaYmdBogota(r.fecha) === fecha)
+      .sort((a, b) => String(a.hora_inicio || '').localeCompare(String(b.hora_inicio || '')));
+
+    if (!candidatasFecha.length) return null;
 
     const ahoraMin = (now.getHours() * 60) + now.getMinutes();
     const toMin = (hhmm) => {
@@ -207,9 +227,9 @@ class ReservaRepository {
       return (h * 60) + m;
     };
 
-    let mejor = candidatas[0];
+    let mejor = candidatasFecha[0];
     let mejorScore = Number.POSITIVE_INFINITY;
-    for (const reserva of candidatas) {
+    for (const reserva of candidatasFecha) {
       const inicio = toMin(reserva.hora_inicio);
       const fin = toMin(reserva.hora_fin);
       if (inicio === null || fin === null) continue;
