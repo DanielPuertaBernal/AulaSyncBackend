@@ -130,12 +130,24 @@ class NotificacionService {
 
     try {
       const fechaRef = notif.fecha_hora_prestamo || notif.fecha_envio;
-      const htmlContent = devolucionLlaveTemplate({
-        nombreDocente: notif.destinatario_nombre,
-        salon: notif.salon,
-        fechaPrestamo: formatearFecha(fechaRef),
-        tiempoTranscurrido: calcularTiempoTranscurrido(fechaRef),
-      });
+      let htmlContent;
+
+      if (notif.tipo_notificacion === 'reserva_no_reclamada') {
+        htmlContent = reservaNoReclamadaTemplate({
+          nombreSolicitante: notif.destinatario_nombre,
+          salon: notif.salon,
+          fecha: notif.reserva_fecha || formatearFecha(fechaRef),
+          horaInicio: notif.reserva_hora_inicio || '',
+          horaFin: notif.reserva_hora_fin || '',
+        });
+      } else {
+        htmlContent = devolucionLlaveTemplate({
+          nombreDocente: notif.destinatario_nombre,
+          salon: notif.salon,
+          fechaPrestamo: formatearFecha(fechaRef),
+          tiempoTranscurrido: calcularTiempoTranscurrido(fechaRef),
+        });
+      }
 
       await sendEmail({
         to: notif.destinatario_correo,
