@@ -1,5 +1,6 @@
 'use strict';
 const programacionRepository = require('./programacion.repository');
+const semestreRepository = require('./programacion.semestre.repository');
 const ApiError = require('../../shared/errors/api.error');
 const { parseExcel, cleanText, cleanDocumento, generateExcel } = require('../../shared/utils/excel.parser');
 const { getDiaActual, horaAMinutos } = require('../../shared/utils/date.helper');
@@ -8,14 +9,89 @@ const { createLogger } = require('../../shared/utils/logger');
 
 const logger = createLogger('Programacion');
 
+/**
+ * Convierte el código raw de semestre del Excel al código normalizado.
+ * Formato esperado: PAAAA  donde P=periodo (1 o 2) y AAAA=año (ej: 12026 → 2026-1)
+ * @param {string|number} raw
+ * @returns {{ codigo: string, anio: number, periodo: number, codigo_raw: string }}
+ */
+function normalizarCodigoSemestre(raw) {
+  const str = String(raw).trim().replace(/\.0$/, '');
+  if (!/^\d{5}$/.test(str)) {
+    throw ApiError.badRequest(`Código de semestre inválido en el Excel: "${raw}". Se esperaba formato PAAAA (ej: 12026).`);
+  }
+  const periodo = parseInt(str[0], 10);
+  const anio = parseInt(str.slice(1), 10);
+  if (periodo < 1 || periodo > 2) {
+    throw ApiError.badRequest(`Período de semestre inválido: ${periodo}. Solo se admiten 1 o 2.`);
+  }
+  return { codigo: `${anio}-${periodo}`, anio, periodo, codigo_raw: str };
+}
+
+/**
+ * Parsea una fecha del Excel con formato "D/MM/YYYY HH:MM:SS" o "DD/MM/YYYY HH:MM:SS".
+ * @param {string|null} str
+ * @returns {Date|null}
+ */
+function parseFechaExcel(str) {
+  if (!str) return null;
+  const datepart = String(str).trim().split(' ')[0];
+  const parts = datepart.split('/');
+  if (parts.length !== 3) return null;
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  const year = parseInt(parts[2], 10);
+  if (Number.isNaN(day) || Number.isNaN(month) || Number.isNaN(year)) return null;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
 class ProgramacionService {
-  async listar() {
+  async listar(semestre = null) {
+    if (semestre) return programacionRepository.findBySemestre(semestre);
     return programacionRepository.findAll();
   }
 
-  async listarPorDia(dia, clasesConLlave = []) {
+  async listarSemestres() {
+    return semestreRepository.findAll();
+  }
+
+  async listarSemestreVigente() {
+    return semestreRepository.findVigente();
+  }
+
+  async eliminarSemestre(codigo) {
+    const existe = await semestreRepository.findByCodigo(codigo);
+    if (!existe) throw ApiError.notFound(`No existe el semestre "${codigo}"`);
+    await programacionRepository.deleteBySemestre(codigo);
+    await semestreRepository.deleteByCodigo(codigo);
+    logger.info('Semestre eliminado', { codigo });
+    return { eliminado: true, codigo };
+  }
+
+  async actualizarFechasSemestre(codigo, fecha_inicio_str, fecha_fin_str) {
+    const existe = await semestreRepository.findByCodigo(codigo);
+    if (!existe) throw ApiError.notFound(`No existe el semestre "${codigo}"`);
+    const inicio = new Date(fecha_inicio_str);
+    const fin = new Date(fecha_fin_str);
+    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
+      throw ApiError.badRequest('Fechas inválidas');
+    }
+    if (inicio >= fin) {
+      throw ApiError.badRequest('La fecha de inicio debe ser anterior a la fecha de fin');
+    }
+    const actualizado = await semestreRepository.updateFechas(codigo, inicio, fin);
+    logger.info('Fechas de semestre actualizadas', { codigo, inicio, fin });
+    return actualizado;
+  }
+
+  async listarPorDia(dia, clasesConLlave = [], semestre = null) {
     const diaFiltro = dia || getDiaActual();
-    const clases = await programacionRepository.findByDia(diaFiltro);
+    let semestreFiltro = semestre;
+    if (!semestreFiltro) {
+      const vigente = await semestreRepository.findVigente();
+      semestreFiltro = vigente?.codigo || null;
+    }
+    const clases = await programacionRepository.findByDia(diaFiltro, semestreFiltro);
 
     return clases.filter((clase) => {
       const doc = normalizeDocumento(clase.numero_documento);
@@ -27,12 +103,14 @@ class ProgramacionService {
     });
   }
 
-  async exportar() {
-    const registros = await programacionRepository.findAll();
+  async exportar(semestre = null) {
+    const registros = semestre
+      ? await programacionRepository.findBySemestre(semestre)
+      : await programacionRepository.findAll();
     return generateExcel(registros, 'Programacion');
   }
 
-  async importarDesdeExcel(buffer) {
+  async importarDesdeExcel(buffer, cargadoPor = '') {
     const rows = parseExcel(buffer);
     if (!rows.length) throw ApiError.badRequest('El archivo Excel está vacío');
 
@@ -41,9 +119,76 @@ class ProgramacionService {
       throw ApiError.badRequest('No se encontraron registros válidos en el archivo');
     }
 
-    const consolidados = this._unificarHorarios(limpios);
-    logger.info('Importación de programación', { filas: rows.length, validos: limpios.length, consolidados: consolidados.length });
-    return programacionRepository.bulkInsert(consolidados);
+    // Extraer y validar semestre único del archivo
+    const semestresDetectados = [...new Set(limpios.map((r) => r.semestre).filter(Boolean))];
+    if (semestresDetectados.length === 0) {
+      throw ApiError.badRequest('No se detectó código de semestre en el Excel. Verifique la columna "semestre".');
+    }
+    if (semestresDetectados.length > 1) {
+      throw ApiError.badRequest(
+        `El archivo contiene múltiples semestres: ${semestresDetectados.join(', ')}. Importe un semestre a la vez.`
+      );
+    }
+
+    const semestreCodigo = semestresDetectados[0];
+
+    // Extraer fechas de inicio/fin del semestre (consistentes en todo el archivo)
+    const fechasInicio = [...new Set(limpios.map((r) => r._fecha_inicio_raw).filter(Boolean))];
+    const fechasFin = [...new Set(limpios.map((r) => r._fecha_fin_raw).filter(Boolean))];
+
+    const fechaInicio = parseFechaExcel(fechasInicio[0] || null);
+    const fechaFin = parseFechaExcel(fechasFin[0] || null);
+
+    if (!fechaInicio || !fechaFin) {
+      throw ApiError.badRequest('No se encontraron fechas de inicio o fin del semestre en el Excel. Verifique las columnas "fecha_inicio" y "fecha_fin".');
+    }
+    if (fechaInicio >= fechaFin) {
+      throw ApiError.badRequest('La fecha de inicio del semestre debe ser anterior a la fecha de fin.');
+    }
+
+    // Limpiar campos internos temporales antes de persistir
+    const registrosLimpios = limpios.map(({ _fecha_inicio_raw, _fecha_fin_raw, ...rest }) => ({
+      ...rest,
+      fecha_inicio_semestre: fechaInicio,
+      fecha_fin_semestre: fechaFin,
+    }));
+
+    const consolidados = this._unificarHorarios(registrosLimpios);
+    logger.info('Importación de programación', {
+      filas: rows.length,
+      validos: limpios.length,
+      consolidados: consolidados.length,
+      semestre: semestreCodigo,
+    });
+
+    const result = await programacionRepository.bulkInsert(consolidados, semestreCodigo);
+
+    // Upsert metadatos del semestre
+    try {
+      const meta = normalizarCodigoSemestre(
+        limpios.find((r) => r._semestre_raw)?._semestre_raw || semestreCodigo
+      );
+      await semestreRepository.upsert({
+        codigo_raw: meta.codigo_raw,
+        codigo: semestreCodigo,
+        anio: meta.anio,
+        periodo: meta.periodo,
+        fecha_inicio: fechaInicio,
+        fecha_fin: fechaFin,
+        fecha_carga: new Date(),
+        cargado_por: cargadoPor,
+        total_registros: result.insertados,
+      });
+    } catch (metaErr) {
+      logger.warn('No se pudo guardar metadatos del semestre', { error: metaErr.message });
+    }
+
+    return {
+      insertados: result.insertados,
+      semestre: semestreCodigo,
+      fecha_inicio: fechaInicio,
+      fecha_fin: fechaFin,
+    };
   }
 
   /**
@@ -118,6 +263,21 @@ class ProgramacionService {
         mapped.estudiantes_matriculados = parseInt(mapped.estudiantes_matriculados, 10) || 0;
         mapped.total_estudiantes =
           (mapped.estudiantes_prematriculados + mapped.estudiantes_matriculados) || 0;
+
+        // Normalizar el código de semestre y guardar raw para upsert de metadatos
+        if (mapped.semestre) {
+          try {
+            const meta = normalizarCodigoSemestre(mapped.semestre);
+            mapped._semestre_raw = meta.codigo_raw;
+            mapped.semestre = meta.codigo;
+          } catch {
+            // si no normaliza, mantener valor original
+          }
+        }
+
+        // Guardar fechas raw para extraerlas una sola vez en importar
+        mapped._fecha_inicio_raw = row['fecha_inicio'] || row['Fecha Inicio'] || null;
+        mapped._fecha_fin_raw = row['fecha_fin'] || row['Fecha Fin'] || null;
 
         return mapped;
       })

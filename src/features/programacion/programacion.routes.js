@@ -43,6 +43,38 @@ router.get('/', ...requireAuth, (req, res) => programacionController.listar(req,
 
 /**
  * @openapi
+ * /programacion/semestres:
+ *   get:
+ *     tags: [Programación]
+ *     summary: Listar todos los semestres cargados (solo admin)
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de semestres con metadatos
+ */
+router.get('/semestres', ...requireAdmin, (req, res) => programacionController.listarSemestres(req, res));
+
+/**
+ * @openapi
+ * /programacion/semestres/vigente:
+ *   get:
+ *     tags: [Programación]
+ *     summary: Obtener el semestre actualmente vigente
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Semestre vigente
+ */
+router.get('/semestres/vigente', ...requireAuth, (req, res) => programacionController.listarSemestreVigente(req, res));
+
+router.delete('/semestres/:codigo', ...requireAdmin, (req, res) => programacionController.eliminarSemestre(req, res));
+
+router.patch('/semestres/:codigo/fechas', ...requireAdmin, (req, res) => programacionController.actualizarFechasSemestre(req, res));
+
+/**
+ * @openapi
  * /programacion/exportar:
  *   get:
  *     tags: [Programación]

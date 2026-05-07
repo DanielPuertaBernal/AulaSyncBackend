@@ -4,6 +4,10 @@ const mongoose = require('mongoose');
 const programacionSchema = new mongoose.Schema(
   {
     semestre: { type: String, default: '', trim: true },
+    /** Fecha de inicio del semestre al que pertenece este registro */
+    fecha_inicio_semestre: { type: Date, default: null },
+    /** Fecha de fin del semestre al que pertenece este registro */
+    fecha_fin_semestre: { type: Date, default: null },
     numero_documento: { type: String, required: true, trim: true },
     docente: { type: String, default: '', trim: true },
     dia: { type: String, default: '', trim: true },
@@ -27,6 +31,8 @@ const programacionSchema = new mongoose.Schema(
   }
 );
 
+programacionSchema.index({ semestre: 1 });
+programacionSchema.index({ semestre: 1, dia: 1 });
 programacionSchema.index({ dia: 1 });
 programacionSchema.index({ numero_documento: 1 });
 programacionSchema.index({ aula: 1 });
