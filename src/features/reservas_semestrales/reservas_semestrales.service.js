@@ -80,11 +80,13 @@ class ReservasSemestralesService {
   /** Exporta las reservas semestrales de un semestre a Excel. */
   async exportar(semestre) {
     const registros = await reservasSemestralesRepository.findBySemestre(semestre);
-    const CAMPOS_EXCLUIDOS = ['_id', '__v', 'tipo'];
+    const CAMPOS_EXCLUIDOS = ['_id', '__v', 'tipo', 'codigo_materia', 'grupo', 'nivel_grupo', 'estudiantes_prematriculados', 'estudiantes_matriculados', 'total_estudiantes', 'observaciones'];
     const datos = registros.map((r) => {
-      const obj = r.toObject ? r.toObject() : { ...r };
-      CAMPOS_EXCLUIDOS.forEach((c) => delete obj[c]);
-      return obj;
+      const raw = r.toObject ? r.toObject() : { ...r };
+      CAMPOS_EXCLUIDOS.forEach((c) => delete raw[c]);
+      // Garantizar orden: semestre → consecutivo → resto
+      const { semestre: sem, consecutivo, ...resto } = raw;
+      return { semestre: sem, consecutivo, ...resto };
     });
     return generateExcel(datos, `Reservas_Semestrales_${semestre}`);
   }

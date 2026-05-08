@@ -90,7 +90,7 @@ router.patch('/semestres/:codigo/fechas', ...requireAdmin, (req, res) => program
  *               type: string
  *               format: binary
  */
-router.get('/exportar', ...requireAdmin, (req, res) => programacionController.exportar(req, res));
+router.get('/exportar', ...requireAuth, (req, res) => programacionController.exportar(req, res));
 
 /**
  * @openapi

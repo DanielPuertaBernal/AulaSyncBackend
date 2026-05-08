@@ -30,7 +30,7 @@ router.delete(
 
 router.get(
   '/semestres/:codigo/reservas-semestrales/exportar',
-  ...requireAdmin,
+  ...requireAuth,
   (req, res) => reservasSemestralesController.exportar(req, res)
 );
 
