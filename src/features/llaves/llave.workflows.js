@@ -172,7 +172,7 @@ function createLlaveWorkflows({
       },
       tipoEntrega: 'carnet',
       ubicacionPrestamo,
-      origenRegistro: 'programacion',
+      origenRegistro: claseTarget._origen === 'reserva_semestral' ? 'reserva_semestral' : 'programacion',
     });
 
     return construirResultadoPrestamo({

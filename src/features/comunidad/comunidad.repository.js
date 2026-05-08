@@ -12,6 +12,11 @@ class ComunidadRepository {
     return Comunidad.findOne({ numero_documento: String(documento) }).lean();
   }
 
+  /** @param {string[]} documentos @returns {Promise<object[]>} */
+  async findManyByDocumentos(documentos) {
+    return Comunidad.find({ numero_documento: { $in: documentos } }).lean();
+  }
+
   /** @param {string} idCarnet @returns {Promise<object|null>} */
   async findByCarnet(idCarnet) {
     return Comunidad.findOne({ id_carnet: String(idCarnet) }).lean();

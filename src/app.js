@@ -27,6 +27,7 @@ const notificacionRoutes = require('./features/notificaciones/notificacion.route
 const configuracionRoutes = require('./features/configuracion/configuracion.routes');
 const novedadRoutes = require('./features/novedades/novedad.routes');
 const reservaRoutes = require('./features/reservas/reserva.routes');
+const reservasSemestralesRoutes = require('./features/reservas_semestrales/reservas_semestrales.routes');
 
 const app = express();
 
@@ -64,6 +65,7 @@ app.use('/api/notificaciones', notificacionRoutes);
 app.use('/api/configuracion', configuracionRoutes);
 app.use('/api/novedades', novedadRoutes);
 app.use('/api/reservas', reservaRoutes);
+app.use('/api/programacion', reservasSemestralesRoutes);
 
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => {

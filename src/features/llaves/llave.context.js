@@ -4,6 +4,7 @@ const llaveRepository = require('./llave.repository');
 const comunidadRepository = require('../comunidad/comunidad.repository');
 const programacionRepository = require('../programacion/programacion.repository');
 const monitorRepository = require('../monitores/monitor.repository');
+const reservasSemestralesRepository = require('../reservas_semestrales/reservas_semestrales.repository');
 const {
   getFechaHoy,
   getDiaActual,
@@ -18,6 +19,25 @@ const {
   horarioCubiertoPorPrestamo,
   agruparClasesConsecutivas,
 } = require('./llave.domain');
+
+/**
+ * Mapea una reserva semestral al formato de clase esperado por los workflows de llaves.
+ * @param {object} reserva
+ * @returns {object}
+ */
+function reservaSemestralToClase(reserva) {
+  return {
+    numero_documento: normalizarDocumento(reserva.nroidenti),
+    dia: reserva.dia || '',
+    horario: reserva.horario || '',
+    hora_inicio: reserva.hora_inicio || '',
+    hora_fin: reserva.hora_fin || '',
+    aula: reserva.aula || '',
+    facultad: 'Reserva Semestral',
+    materia: reserva.nombre_reserva || '',
+    _origen: 'reserva_semestral',
+  };
+}
 
 /** Busca una persona de la comunidad por su ID de carnet NFC. */
 async function buscarPersonaPorCarnet(idCarnet) {
@@ -40,24 +60,29 @@ async function resolverContextoNFC(persona, documento) {
   }
 
   const diaActual = getDiaActual();
-  const [todasClases, registrosHoy] = await Promise.all([
+  const [todasClases, registrosHoy, reservasSemestralesHoy] = await Promise.all([
     programacionRepository.findByDia(diaActual),
     llaveRepository.findByFecha(getFechaHoy()),
+    reservasSemestralesRepository.findByDia(diaActual, new Date()),
   ]);
 
   const clasesDocente = (todasClases || []).filter(
     (clase) => normalizarDocumento(clase.numero_documento) === documento
   );
 
-  if (clasesDocente.length) {
-    return resolverContextoDocente({ persona, documento, clasesDocente, registrosHoy });
+  const reservasDocente = (reservasSemestralesHoy || []).filter(
+    (r) => normalizarDocumento(r.nroidenti) === documento
+  );
+
+  if (clasesDocente.length || reservasDocente.length) {
+    return resolverContextoDocente({ persona, documento, clasesDocente, reservasDocente, registrosHoy });
   }
 
   return resolverContextoMonitor({ persona, documento, todasClases, registrosHoy });
 }
 
-/** Resuelve contexto cuando la persona es un docente con clases programadas. */
-async function resolverContextoDocente({ persona, documento, clasesDocente, registrosHoy }) {
+/** Resuelve contexto cuando la persona es un docente con clases programadas o reservas semestrales. */
+async function resolverContextoDocente({ persona, documento, clasesDocente, reservasDocente = [], registrosHoy }) {
   const prestamoActivo = await llaveRepository.findPendienteByDocumento(documento);
   if (prestamoActivo) {
     return { rol: 'docente', docente: persona, prestamoActivo, clasesDisponibles: [] };
@@ -67,11 +92,17 @@ async function resolverContextoDocente({ persona, documento, clasesDocente, regi
     .filter((registro) => normalizarDocumento(registro.numero_documento) === documento)
     .map((registro) => String(registro.horario || '').trim());
 
-  const clasesDisponibles = agruparClasesConsecutivas(
+  const clasesProgramacion = agruparClasesConsecutivas(
     (clasesDocente || []).filter(
       (clase) => !horarioCubiertoPorPrestamo(String(clase.horario || '').trim(), horariosProcesados)
     )
   );
+
+  const clasesReservas = (reservasDocente || [])
+    .map(reservaSemestralToClase)
+    .filter((r) => !horarioCubiertoPorPrestamo(String(r.horario || '').trim(), horariosProcesados));
+
+  const clasesDisponibles = [...clasesProgramacion, ...clasesReservas];
 
   if (!clasesDisponibles.length) {
     return {
@@ -79,7 +110,7 @@ async function resolverContextoDocente({ persona, documento, clasesDocente, regi
       docente: persona,
       prestamoActivo: null,
       clasesDisponibles: [],
-      mensajeSinClase: 'Todas las clases de hoy ya fueron procesadas',
+      mensajeSinClase: 'Todas las clases y reservas de hoy ya fueron procesadas',
     };
   }
 
@@ -199,6 +230,17 @@ async function buscarClaseParaConfirmacion({ persona, aula, horario, rol }) {
     );
     const agrupadas = agruparClasesConsecutivas(clasesEnAula);
     clase = agrupadas.find((item) => normalizeHorario(item.horario) === horarioNormalizado);
+
+    // Buscar en reservas semestrales si no se encontró en programación
+    if (!clase) {
+      const reservasHoy = await reservasSemestralesRepository.findByDia(getDiaActual(), new Date());
+      const reserva = (reservasHoy || []).find(
+        (r) => normalizarDocumento(r.nroidenti) === docenteDoc
+          && normalizeAula(r.aula) === aulaNormalizada
+          && normalizeHorario(r.horario) === horarioNormalizado
+      );
+      if (reserva) clase = reservaSemestralToClase(reserva);
+    }
   }
 
   return { clase, docenteDoc };

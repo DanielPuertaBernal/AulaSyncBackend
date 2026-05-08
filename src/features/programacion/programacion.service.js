@@ -1,6 +1,7 @@
 'use strict';
 const programacionRepository = require('./programacion.repository');
 const semestreRepository = require('./programacion.semestre.repository');
+const reservasSemestralesRepository = require('../reservas_semestrales/reservas_semestrales.repository');
 const ApiError = require('../../shared/errors/api.error');
 const { parseExcel, cleanText, cleanDocumento, generateExcel } = require('../../shared/utils/excel.parser');
 const { getDiaActual, horaAMinutos } = require('../../shared/utils/date.helper');
@@ -62,7 +63,10 @@ class ProgramacionService {
   async eliminarSemestre(codigo) {
     const existe = await semestreRepository.findByCodigo(codigo);
     if (!existe) throw ApiError.notFound(`No existe el semestre "${codigo}"`);
-    await programacionRepository.deleteBySemestre(codigo);
+    await Promise.all([
+      programacionRepository.deleteBySemestre(codigo),
+      reservasSemestralesRepository.deleteBySemestre(codigo),
+    ]);
     await semestreRepository.deleteByCodigo(codigo);
     logger.info('Semestre eliminado', { codigo });
     return { eliminado: true, codigo };
@@ -91,9 +95,12 @@ class ProgramacionService {
       const vigente = await semestreRepository.findVigente();
       semestreFiltro = vigente?.codigo || null;
     }
-    const clases = await programacionRepository.findByDia(diaFiltro, semestreFiltro);
+    const [todasClases, reservasSemestrales] = await Promise.all([
+      programacionRepository.findByDia(diaFiltro, semestreFiltro),
+      reservasSemestralesRepository.findByDia(diaFiltro, new Date()),
+    ]);
 
-    return clases.filter((clase) => {
+    const clases = todasClases.filter((clase) => {
       const doc = normalizeDocumento(clase.numero_documento);
       const horario = normalizeString(clase.horario);
       const yaEntregada = clasesConLlave.some(
@@ -101,6 +108,8 @@ class ProgramacionService {
       );
       return !yaEntregada;
     });
+
+    return { clases, reservasSemestrales };
   }
 
   async exportar(semestre = null) {

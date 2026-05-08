@@ -46,8 +46,8 @@ class ProgramacionController {
         clasesConLlave = JSON.parse(req.query.clasesConLlave);
       }
     } catch { /* ignorar */ }
-    const registros = await programacionService.listarPorDia(dia, clasesConLlave, semestre);
-    return res.json({ ok: true, data: { registros } });
+    const { clases, reservasSemestrales } = await programacionService.listarPorDia(dia, clasesConLlave, semestre);
+    return res.json({ ok: true, data: { clases, reservasSemestrales } });
   }
 
   /** POST /api/programacion/importar - Importa desde archivo Excel */
