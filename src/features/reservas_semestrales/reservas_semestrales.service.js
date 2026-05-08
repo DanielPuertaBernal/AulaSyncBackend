@@ -137,6 +137,7 @@ class ReservasSemestralesService {
       const { horario, hora_inicio, hora_fin } = normalizarHorario(horarioRaw);
 
       registros.push({
+        tipo: 'semestral',
         consecutivo,
         aula: aulaRaw,
         dia: diaNombre,
@@ -145,6 +146,10 @@ class ReservasSemestralesService {
         hora_fin,
         responsable: responsableRaw,
         nroidenti: nroidentiRaw,
+        /** Campos mapeados al esquema común de programacion */
+        numero_documento: nroidentiRaw,
+        docente: responsableRaw,
+        materia: nombre_reservaRaw,
         nombre_reserva: nombre_reservaRaw,
         descripcion_reserva: descripcion_reservaRaw,
         semestre: codigoSemestre,

@@ -15,7 +15,7 @@ class ProgramacionRepository {
       const map = { a: '[aá]', e: '[eé]', i: '[ií]', o: '[oó]', u: '[uú]' };
       return map[ch.toLowerCase()] || ch;
     }).join('');
-    const filter = { dia: new RegExp(`^${pattern}$`, 'i') };
+    const filter = { tipo: 'programacion', dia: new RegExp(`^${pattern}$`, 'i') };
     if (semestre) filter.semestre = semestre;
     return Programacion.find(filter).lean();
   }
@@ -27,7 +27,7 @@ class ProgramacionRepository {
 
   /** @param {string} semestre - Código normalizado (ej: "2026-1") @returns {Promise<object[]>} */
   async findBySemestre(semestre) {
-    return Programacion.find({ semestre }).lean();
+    return Programacion.find({ semestre, tipo: 'programacion' }).lean();
   }
 
   /** Elimina todos los registros de un semestre. @param {string} semestre */
@@ -35,12 +35,12 @@ class ProgramacionRepository {
     return Programacion.deleteMany({ semestre });
   }
 
-  /** @param {object[]} registros @param {string} semestre - Código normalizado del semestre a reemplazar @returns {Promise<{insertados: number}>} Reemplaza la programación solo del semestre indicado */
+  /** @param {object[]} registros @param {string} semestre - Código normalizado del semestre a reemplazar @returns {Promise<{insertados: number}>} Reemplaza solo los registros de tipo 'programacion' del semestre indicado (no toca semestrales) */
   async bulkInsert(registros, semestre) {
     const session = await mongoose.startSession();
     try {
       session.startTransaction();
-      await Programacion.deleteMany({ semestre }, { session });
+      await Programacion.deleteMany({ semestre, tipo: 'programacion' }, { session });
       const result = registros.length
         ? await Programacion.insertMany(registros, { session, ordered: false })
         : [];

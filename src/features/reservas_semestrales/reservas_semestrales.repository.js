@@ -1,12 +1,11 @@
 'use strict';
 const mongoose = require('mongoose');
-const { ReservaSemestral } = require('./reservas_semestrales.schema');
+const { Programacion } = require('../programacion/programacion.schema');
 
 class ReservasSemestralesRepository {
   /** @param {string} semestre - Código normalizado (ej: "2026-1") @returns {Promise<object[]>} */
   async findBySemestre(semestre) {
-    const docs = await ReservaSemestral.find({ semestre }).lean();
-    return docs.map((d) => ({ ...d, facultad: d.facultad ?? 'No aplica' }));
+    return Programacion.find({ semestre, tipo: 'semestral' }).lean();
   }
 
   /**
@@ -16,18 +15,18 @@ class ReservasSemestralesRepository {
    * @returns {Promise<object[]>}
    */
   async findByDia(dia, fechaHoy) {
-    const docs = await ReservaSemestral.find({
+    return Programacion.find({
+      tipo: 'semestral',
       dia,
       i_cancelada: 0,
       fecha_inicio_semestre: { $lte: fechaHoy },
       fecha_fin_semestre: { $gte: fechaHoy },
     }).lean();
-    return docs.map((d) => ({ ...d, facultad: d.facultad ?? 'No aplica' }));
   }
 
   /** @param {string} semestre @returns {Promise<object>} */
   async deleteBySemestre(semestre) {
-    return ReservaSemestral.deleteMany({ semestre });
+    return Programacion.deleteMany({ semestre, tipo: 'semestral' });
   }
 
   /**
@@ -40,9 +39,9 @@ class ReservasSemestralesRepository {
     const session = await mongoose.startSession();
     try {
       session.startTransaction();
-      await ReservaSemestral.deleteMany({ semestre }, { session });
+      await Programacion.deleteMany({ semestre, tipo: 'semestral' }, { session });
       const result = registros.length
-        ? await ReservaSemestral.insertMany(registros, { session, ordered: false })
+        ? await Programacion.insertMany(registros, { session, ordered: false })
         : [];
       await session.commitTransaction();
       return { insertados: result.length };

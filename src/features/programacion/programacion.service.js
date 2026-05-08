@@ -63,10 +63,8 @@ class ProgramacionService {
   async eliminarSemestre(codigo) {
     const existe = await semestreRepository.findByCodigo(codigo);
     if (!existe) throw ApiError.notFound(`No existe el semestre "${codigo}"`);
-    await Promise.all([
-      programacionRepository.deleteBySemestre(codigo),
-      reservasSemestralesRepository.deleteBySemestre(codigo),
-    ]);
+    // deleteBySemestre en programacion borra TODO el semestre (clases + semestrales)
+    await programacionRepository.deleteBySemestre(codigo);
     await semestreRepository.deleteByCodigo(codigo);
     logger.info('Semestre eliminado', { codigo });
     return { eliminado: true, codigo };
@@ -287,6 +285,7 @@ class ProgramacionService {
         // Guardar fechas raw para extraerlas una sola vez en importar
         mapped._fecha_inicio_raw = row['fecha_inicio'] || row['Fecha Inicio'] || null;
         mapped._fecha_fin_raw = row['fecha_fin'] || row['Fecha Fin'] || null;
+        mapped.tipo = 'programacion';
 
         return mapped;
       })

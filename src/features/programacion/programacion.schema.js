@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 
 const programacionSchema = new mongoose.Schema(
   {
+    /** 'programacion' para clases regulares, 'semestral' para reservas semestrales */
+    tipo: { type: String, enum: ['programacion', 'semestral'], required: true, default: 'programacion', trim: true },
     semestre: { type: String, default: '', trim: true },
     /** Fecha de inicio del semestre al que pertenece este registro */
     fecha_inicio_semestre: { type: Date, default: null },
@@ -24,6 +26,15 @@ const programacionSchema = new mongoose.Schema(
     estudiantes_matriculados: { type: Number, default: 0 },
     total_estudiantes: { type: Number, default: 0 },
     observaciones: { type: String, default: '' },
+    /** Campos exclusivos de registros tipo 'semestral' */
+    consecutivo: { type: String, default: '', trim: true },
+    nroidenti: { type: String, default: '', trim: true },
+    responsable: { type: String, default: '', trim: true },
+    nombre_reserva: { type: String, default: '', trim: true },
+    descripcion_reserva: { type: String, default: '', trim: true },
+    i_cancelada: { type: Number, default: 0 },
+    fecha_cancelacion: { type: String, default: '', trim: true },
+    motivo_cancelacion: { type: String, default: '', trim: true },
   },
   {
     collection: 'programacion',
@@ -31,8 +42,11 @@ const programacionSchema = new mongoose.Schema(
   }
 );
 
+programacionSchema.index({ tipo: 1 });
 programacionSchema.index({ semestre: 1 });
+programacionSchema.index({ semestre: 1, tipo: 1 });
 programacionSchema.index({ semestre: 1, dia: 1 });
+programacionSchema.index({ tipo: 1, dia: 1 });
 programacionSchema.index({ dia: 1 });
 programacionSchema.index({ numero_documento: 1 });
 programacionSchema.index({ aula: 1 });
