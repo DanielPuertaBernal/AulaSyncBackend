@@ -28,6 +28,12 @@ router.delete(
   (req, res) => reservasSemestralesController.eliminar(req, res)
 );
 
+router.get(
+  '/semestres/:codigo/reservas-semestrales/exportar',
+  ...requireAdmin,
+  (req, res) => reservasSemestralesController.exportar(req, res)
+);
+
 // ── Ruta global por día (usada por auxiliar y NFC) ───────────────────────────
 
 router.get(

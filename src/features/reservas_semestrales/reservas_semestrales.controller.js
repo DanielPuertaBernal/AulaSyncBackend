@@ -30,6 +30,15 @@ class ReservasSemestralesController {
     return res.json({ ok: true, data: { eliminado: true, semestre: codigo } });
   }
 
+  /** GET /programacion/semestres/:codigo/reservas-semestrales/exportar */
+  async exportar(req, res) {
+    const { codigo } = req.params;
+    const buffer = await reservasSemestralesService.exportar(codigo);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="reservas_semestrales_${codigo}.xlsx"`);
+    return res.send(buffer);
+  }
+
   /** GET /programacion/reservas-semestrales/dia/:dia */
   async listarPorDia(req, res) {
     const { dia } = req.params;

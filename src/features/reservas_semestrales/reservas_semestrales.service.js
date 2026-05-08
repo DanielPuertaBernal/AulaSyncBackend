@@ -3,7 +3,7 @@ const reservasSemestralesRepository = require('./reservas_semestrales.repository
 const semestreRepository = require('../programacion/programacion.semestre.repository');
 const comunidadRepository = require('../comunidad/comunidad.repository');
 const ApiError = require('../../shared/errors/api.error');
-const { parseExcel, cleanText, cleanDocumento } = require('../../shared/utils/excel.parser');
+const { parseExcel, cleanText, cleanDocumento, generateExcel } = require('../../shared/utils/excel.parser');
 const { createLogger } = require('../../shared/utils/logger');
 
 const logger = createLogger('ReservasSemestrales');
@@ -75,6 +75,18 @@ class ReservasSemestralesService {
     const result = await reservasSemestralesRepository.deleteBySemestre(semestre);
     logger.info('Reservas semestrales eliminadas', { semestre, result });
     return result;
+  }
+
+  /** Exporta las reservas semestrales de un semestre a Excel. */
+  async exportar(semestre) {
+    const registros = await reservasSemestralesRepository.findBySemestre(semestre);
+    const CAMPOS_EXCLUIDOS = ['_id', '__v', 'tipo'];
+    const datos = registros.map((r) => {
+      const obj = r.toObject ? r.toObject() : { ...r };
+      CAMPOS_EXCLUIDOS.forEach((c) => delete obj[c]);
+      return obj;
+    });
+    return generateExcel(datos, `Reservas_Semestrales_${semestre}`);
   }
 
   /**

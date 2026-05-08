@@ -114,7 +114,13 @@ class ProgramacionService {
     const registros = semestre
       ? await programacionRepository.findBySemestre(semestre)
       : await programacionRepository.findAll();
-    return generateExcel(registros, 'Programacion');
+    const CAMPOS_EXCLUIDOS = ['_id', '__v', 'tipo', 'consecutivo', 'i_cancelada', 'fecha_cancelacion', 'motivo_cancelacion'];
+    const datos = registros.map((r) => {
+      const obj = r.toObject ? r.toObject() : { ...r };
+      CAMPOS_EXCLUIDOS.forEach((c) => delete obj[c]);
+      return obj;
+    });
+    return generateExcel(datos, 'Programacion');
   }
 
   async importarDesdeExcel(buffer, cargadoPor = '') {

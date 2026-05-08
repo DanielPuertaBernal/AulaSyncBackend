@@ -8,7 +8,7 @@ const { UBICACIONES } = require('../../shared/constants/nfc.constants');
 
 const router = Router();
 const ubicacionSchema = z.string().trim().min(1, 'ubicacion es requerida');
-const origenSchema = z.enum(['individual', 'programacion']);
+const origenSchema = z.enum(['individual', 'programacion', 'reserva_semestral']);
 
 const entregarSchema = z.object({
   nroidenti: z.string().min(1, 'Documento requerido'),
