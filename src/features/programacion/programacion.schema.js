@@ -26,15 +26,11 @@ const programacionSchema = new mongoose.Schema(
     estudiantes_matriculados: { type: Number, default: 0 },
     total_estudiantes: { type: Number, default: 0 },
     observaciones: { type: String, default: '' },
-    /** Campos exclusivos de registros tipo 'semestral' */
-    consecutivo: { type: String, default: '', trim: true },
-    nroidenti: { type: String, default: '', trim: true },
-    responsable: { type: String, default: '', trim: true },
-    nombre_reserva: { type: String, default: '', trim: true },
-    descripcion_reserva: { type: String, default: '', trim: true },
-    i_cancelada: { type: Number, default: 0 },
-    fecha_cancelacion: { type: String, default: '', trim: true },
-    motivo_cancelacion: { type: String, default: '', trim: true },
+    /** Campos exclusivos de registros tipo 'semestral' (sin default → no se guardan en docs tipo 'programacion') */
+    consecutivo: { type: String, trim: true },
+    i_cancelada: { type: Number },
+    fecha_cancelacion: { type: String, trim: true },
+    motivo_cancelacion: { type: String, trim: true },
   },
   {
     collection: 'programacion',

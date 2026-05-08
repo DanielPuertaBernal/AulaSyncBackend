@@ -275,7 +275,7 @@ function createLlaveWorkflows({
       },
       tipoEntrega: 'carnet',
       ubicacionPrestamo,
-      origenRegistro: reserva_id ? 'individual' : 'programacion',
+      origenRegistro: reserva_id ? 'individual' : (clase._origen || 'programacion'),
     });
 
     if (reserva_id) {

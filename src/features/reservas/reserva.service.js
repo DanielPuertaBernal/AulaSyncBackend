@@ -43,6 +43,7 @@ class ReservaService {
       const progSalon = await Programacion.find({
         aula: datos.nombre_salon,
         dia: new RegExp(diaSemana, 'i'),
+        tipo: 'programacion',
       }).lean();
 
       for (const p of progSalon) {
@@ -210,6 +211,7 @@ class ReservaService {
       progAcademica = await Programacion.find({
         aula: nombre_salon,
         dia: new RegExp(diaSemana, 'i'),
+        tipo: 'programacion',
       }).lean();
     }
 
@@ -251,6 +253,7 @@ class ReservaService {
       progAcademica = await Programacion.find({
         aula: nombre_salon,
         dia: new RegExp(diaSemana, 'i'),
+        tipo: 'programacion',
       }).lean();
     }
 

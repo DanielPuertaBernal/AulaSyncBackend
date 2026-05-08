@@ -124,7 +124,6 @@ class ReservasSemestralesService {
         row.nroidenti ?? row.NroIdenti ?? row.nroIdenti ?? row.numero_documento ?? row['Numero Documento'] ?? row.documento ?? row.Documento ?? ''
       ).trim();
       const nombre_reservaRaw = cleanText(row.nombre_reserva ?? row['Nombre Reserva'] ?? '');
-      const descripcion_reservaRaw = cleanText(row.descripcion_reserva ?? row['Descripcion Reserva'] ?? '');
       const i_canceladaRaw = row.i_cancelada ?? row.ICancelada ?? 0;
       const fecha_cancelacionRaw = cleanText(row.fecha_cancelacion ?? row['Fecha Cancelacion'] ?? '');
       const motivo_cancelacionRaw = cleanText(row.motivo_cancelacion ?? row['Motivo Cancelacion'] ?? '');
@@ -144,14 +143,10 @@ class ReservasSemestralesService {
         horario,
         hora_inicio,
         hora_fin,
-        responsable: responsableRaw,
-        nroidenti: nroidentiRaw,
-        /** Campos mapeados al esquema común de programacion */
+        /** Campos canónicos comunes — no se duplican en nroidenti/responsable/nombre_reserva */
         numero_documento: nroidentiRaw,
         docente: responsableRaw,
         materia: nombre_reservaRaw,
-        nombre_reserva: nombre_reservaRaw,
-        descripcion_reserva: descripcion_reservaRaw,
         semestre: codigoSemestre,
         fecha_inicio_semestre: fecha_inicio,
         fecha_fin_semestre: fecha_fin,

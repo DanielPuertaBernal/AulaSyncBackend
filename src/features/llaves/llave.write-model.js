@@ -15,7 +15,7 @@ function validarEntregaManual(infoClase) {
 }
 
 function normalizarOrigenRegistro(origen = 'individual') {
-  if (!['individual', 'programacion'].includes(origen)) {
+  if (!['individual', 'programacion', 'reserva_semestral'].includes(origen)) {
     throw ApiError.badRequest('Origen de préstamo no válido');
   }
   return origen;

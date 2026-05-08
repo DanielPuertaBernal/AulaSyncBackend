@@ -27,14 +27,14 @@ const {
  */
 function reservaSemestralToClase(reserva) {
   return {
-    numero_documento: normalizarDocumento(reserva.nroidenti),
+    numero_documento: normalizarDocumento(reserva.numero_documento),
     dia: reserva.dia || '',
     horario: reserva.horario || '',
     hora_inicio: reserva.hora_inicio || '',
     hora_fin: reserva.hora_fin || '',
     aula: reserva.aula || '',
     facultad: 'Reserva Semestral',
-    materia: reserva.nombre_reserva || '',
+    materia: reserva.materia || '',
     _origen: 'reserva_semestral',
   };
 }
@@ -71,7 +71,7 @@ async function resolverContextoNFC(persona, documento) {
   );
 
   const reservasDocente = (reservasSemestralesHoy || []).filter(
-    (r) => normalizarDocumento(r.nroidenti) === documento
+    (r) => normalizarDocumento(r.numero_documento) === documento
   );
 
   if (clasesDocente.length || reservasDocente.length) {
