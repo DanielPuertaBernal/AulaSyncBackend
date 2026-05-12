@@ -31,6 +31,13 @@ const programacionSchema = new mongoose.Schema(
     i_cancelada: { type: Number },
     fecha_cancelacion: { type: String, trim: true },
     motivo_cancelacion: { type: String, trim: true },
+    /** Campos de reservas semestrales creadas manualmente */
+    grupo_id: { type: String, trim: true },
+    creado_manualmente: { type: Boolean },
+    tipo_solicitante: { type: String, enum: ['docente', 'estudiante'], trim: true },
+    responsable_documento: { type: String, trim: true },
+    responsable_nombre: { type: String, trim: true },
+    nombre_bloque: { type: String, trim: true },
   },
   {
     collection: 'programacion',
@@ -46,6 +53,7 @@ programacionSchema.index({ tipo: 1, dia: 1 });
 programacionSchema.index({ dia: 1 });
 programacionSchema.index({ numero_documento: 1 });
 programacionSchema.index({ aula: 1 });
+programacionSchema.index({ grupo_id: 1 });
 
 const Programacion = mongoose.model('Programacion', programacionSchema);
 module.exports = { Programacion };

@@ -42,4 +42,52 @@ router.get(
   (req, res) => reservasSemestralesController.listarPorDia(req, res)
 );
 
+// ── Disponibilidad de slots por salón y día ───────────────────────────────────
+
+router.get(
+  '/reservas-semestrales/disponibilidad',
+  ...requireAuth,
+  (req, res) => reservasSemestralesController.disponibilidad(req, res)
+);
+
+// ── Validar conflictos de una franja ──────────────────────────────────────────
+
+router.post(
+  '/reservas-semestrales/validar',
+  ...requireAuth,
+  (req, res) => reservasSemestralesController.validar(req, res)
+);
+
+// ── Crear reserva semestral manual ────────────────────────────────────────────
+
+router.post(
+  '/reservas-semestrales',
+  ...requireAuth,
+  (req, res) => reservasSemestralesController.crearManual(req, res)
+);
+
+// ── Salones disponibles para un día y franja horaria ────────────────────────
+
+router.get(
+  '/reservas-semestrales/salones-disponibles',
+  ...requireAuth,
+  (req, res) => reservasSemestralesController.salonesDisponibles(req, res)
+);
+
+// ── Listar todas las reservas semestrales (todos los semestres) ───────────────
+
+router.get(
+  '/reservas-semestrales/todas',
+  ...requireAuth,
+  (req, res) => reservasSemestralesController.listarTodas(req, res)
+);
+
+// ── Cancelar grupo de reservas semestrales manuales ───────────────────────────
+
+router.delete(
+  '/reservas-semestrales/grupo/:grupo_id',
+  ...requireAuth,
+  (req, res) => reservasSemestralesController.cancelarGrupo(req, res)
+);
+
 module.exports = router;

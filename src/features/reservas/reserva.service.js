@@ -1,6 +1,7 @@
 'use strict';
 const reservaRepository = require('./reserva.repository');
 const { Programacion } = require('../programacion/programacion.schema');
+const semestreRepository = require('../programacion/programacion.semestre.repository');
 const { Llave } = require('../llaves/llave.schema');
 const { Reserva } = require('./reserva.schema');
 const {
@@ -53,6 +54,27 @@ class ReservaService {
               tipo: 'programacion',
               detalle: `${p.docente || 'Docente'} — ${p.materia || ''} (${p.hora_inicio}-${p.hora_fin})`,
               data: p,
+            });
+          }
+        }
+      }
+
+      // Conflictos con reservas semestrales activas del semestre vigente
+      const semestreVigente = await semestreRepository.findVigente();
+      if (semestreVigente) {
+        const semestrales = await Programacion.find({
+          tipo: 'semestral',
+          aula: datos.nombre_salon,
+          dia: new RegExp(diaSemana, 'i'),
+          semestre: semestreVigente.codigo,
+          i_cancelada: { $ne: 1 },
+        }).lean();
+        for (const s of semestrales) {
+          if (s.hora_inicio && s.hora_fin && s.hora_inicio < datos.hora_fin && s.hora_fin > datos.hora_inicio) {
+            conflictos.push({
+              tipo: 'semestral',
+              detalle: `${s.docente || 'Docente'} — ${s.materia || ''} (${s.hora_inicio}-${s.hora_fin})`,
+              data: s,
             });
           }
         }

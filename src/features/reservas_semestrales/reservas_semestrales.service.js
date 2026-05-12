@@ -1,7 +1,10 @@
 'use strict';
+const crypto = require('crypto');
 const reservasSemestralesRepository = require('./reservas_semestrales.repository');
 const semestreRepository = require('../programacion/programacion.semestre.repository');
 const comunidadRepository = require('../comunidad/comunidad.repository');
+const { Programacion } = require('../programacion/programacion.schema');
+const { Salon } = require('../salones/salon.schema');
 const ApiError = require('../../shared/errors/api.error');
 const { parseExcel, cleanText, cleanDocumento, generateExcel } = require('../../shared/utils/excel.parser');
 const { createLogger } = require('../../shared/utils/logger');
@@ -200,6 +203,228 @@ class ReservasSemestralesService {
 
     const result = await reservasSemestralesRepository.bulkInsert(codigoSemestre, registros);
     return { insertados: result.insertados, semestre: codigoSemestre };
+  }
+
+  /**
+   * Retorna los slots de 30 min (07:00–22:00) con disponibilidad para un salón y día del semestre vigente.
+   * @param {string} nombre_salon
+   * @param {string} dia - Nombre completo del día en español (ej: "Lunes")
+   * @returns {Promise<{slots: Array<{hora: string, disponible: boolean, motivo?: string, detalle?: string}>}>}
+   */
+  async disponibilidadPorDia(nombre_salon, dia) {
+    const vigente = await semestreRepository.findVigente();
+    if (!vigente) throw ApiError.notFound('No hay semestre vigente');
+
+    // Programación regular del salón ese día
+    const progRegular = await Programacion.find({
+      tipo: 'programacion',
+      aula: nombre_salon,
+      dia: new RegExp(dia, 'i'),
+      semestre: vigente.codigo,
+    }).lean();
+
+    // Reservas semestrales activas del salón ese día
+    const semestrales = await reservasSemestralesRepository.findByAulaDia(nombre_salon, dia, vigente.codigo);
+
+    // Generar slots 07:00–22:00 cada 30 min
+    const slots = [];
+    for (let h = 7; h < 22; h++) {
+      for (const m of [0, 30]) {
+        const hora = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        const horaFin = m === 30
+          ? `${String(h + 1).padStart(2, '0')}:00`
+          : `${String(h).padStart(2, '0')}:30`;
+
+        const conflictoRegular = progRegular.find(
+          (p) => p.hora_inicio && p.hora_fin && p.hora_inicio <= hora && p.hora_fin > hora
+        );
+        const conflictoSemestral = semestrales.find(
+          (s) => s.hora_inicio && s.hora_fin && s.hora_inicio <= hora && s.hora_fin > hora
+        );
+
+        if (conflictoRegular) {
+          slots.push({ hora, disponible: false, motivo: 'programacion', detalle: `${conflictoRegular.docente || ''} — ${conflictoRegular.materia || ''} (${conflictoRegular.hora_inicio}–${conflictoRegular.hora_fin})` });
+        } else if (conflictoSemestral) {
+          slots.push({ hora, disponible: false, motivo: 'semestral', detalle: `${conflictoSemestral.docente || ''} — ${conflictoSemestral.materia || ''} (${conflictoSemestral.hora_inicio}–${conflictoSemestral.hora_fin})` });
+        } else {
+          slots.push({ hora, disponible: true });
+        }
+      }
+    }
+    return { slots, semestre: vigente.codigo };
+  }
+
+  /**
+   * Valida si una franja horaria tiene conflictos con programación regular o semestrales activas.
+   * @param {object} params
+   * @param {string} params.nombre_salon
+   * @param {string} params.dia
+   * @param {string} params.hora_inicio
+   * @param {string} params.hora_fin
+   * @param {string} [params.excluir_grupo_id]
+   * @param {string} [params.semestre]
+   */
+  async validarConflictos({ nombre_salon, dia, hora_inicio, hora_fin, excluir_grupo_id, semestre }) {
+    const codigoSemestre = semestre || (await semestreRepository.findVigente())?.codigo;
+    if (!codigoSemestre) throw ApiError.notFound('No hay semestre vigente');
+
+    const conflictos = [];
+
+    const progRegular = await Programacion.find({
+      tipo: 'programacion',
+      aula: nombre_salon,
+      dia: new RegExp(dia, 'i'),
+      semestre: codigoSemestre,
+    }).lean();
+
+    for (const p of progRegular) {
+      if (p.hora_inicio && p.hora_fin && p.hora_inicio < hora_fin && p.hora_fin > hora_inicio) {
+        conflictos.push({ tipo: 'programacion', detalle: `${p.docente || ''} — ${p.materia || ''} (${p.hora_inicio}–${p.hora_fin})` });
+      }
+    }
+
+    const queryS = { tipo: 'semestral', aula: nombre_salon, dia: new RegExp(dia, 'i'), semestre: codigoSemestre, i_cancelada: { $ne: 1 } };
+    if (excluir_grupo_id) queryS.grupo_id = { $ne: excluir_grupo_id };
+    const semestrales = await Programacion.find(queryS).lean();
+
+    for (const s of semestrales) {
+      if (s.hora_inicio && s.hora_fin && s.hora_inicio < hora_fin && s.hora_fin > hora_inicio) {
+        conflictos.push({ tipo: 'semestral', detalle: `${s.docente || ''} — ${s.materia || ''} (${s.hora_inicio}–${s.hora_fin})` });
+      }
+    }
+
+    return { tiene_conflictos: conflictos.length > 0, conflictos };
+  }
+
+  /**
+   * Retorna los salones sin conflicto durante dia+hora en el semestre vigente.
+   * @param {string} dia
+   * @param {string} hora_inicio
+   * @param {string} hora_fin
+   */
+  async salonesDisponibles(dia, hora_inicio, hora_fin) {
+    const vigente = await semestreRepository.findVigente();
+    if (!vigente) throw ApiError.notFound('No hay semestre vigente');
+
+    const overlapQuery = { hora_inicio: { $lt: hora_fin }, hora_fin: { $gt: hora_inicio } };
+    const [ocupadosProg, ocupadosSem] = await Promise.all([
+      Programacion.distinct('aula', {
+        tipo: 'programacion',
+        dia: new RegExp(dia, 'i'),
+        semestre: vigente.codigo,
+        ...overlapQuery,
+      }),
+      Programacion.distinct('aula', {
+        tipo: 'semestral',
+        dia: new RegExp(dia, 'i'),
+        semestre: vigente.codigo,
+        i_cancelada: { $ne: 1 },
+        ...overlapQuery,
+      }),
+    ]);
+
+    const ocupados = new Set([...ocupadosProg, ...ocupadosSem]);
+    const todos = await Salon.find().sort({ nombre_bloque: 1, nombre_salon: 1 }).lean();
+    const disponibles = todos.filter((s) => !ocupados.has(s.nombre_salon));
+    return { salones: disponibles, semestre: vigente.codigo };
+  }
+
+  /**
+   * Crea manualmente un conjunto de reservas semestrales (una por franja).
+   */
+  async crearManual(datos) {
+    const vigente = await semestreRepository.findVigente();
+    if (!vigente) throw ApiError.notFound('No hay semestre vigente activo para asignar la reserva');
+
+    // Buscar facultad del solicitante
+    const persona = await comunidadRepository.findByDocumento(datos.solicitante_documento);
+    const facultad = persona?.facultad || 'No aplica';
+
+    // Validar conflictos por franja
+    const conflictosPorFranja = [];
+    for (const franja of datos.franjas) {
+      const { tiene_conflictos, conflictos } = await this.validarConflictos({
+        nombre_salon: datos.nombre_salon,
+        dia: franja.dia,
+        hora_inicio: franja.hora_inicio,
+        hora_fin: franja.hora_fin,
+        semestre: vigente.codigo,
+      });
+      if (tiene_conflictos) {
+        conflictosPorFranja.push({ franja, conflictos });
+      }
+    }
+
+    if (conflictosPorFranja.length > 0 && !datos.forzar) {
+      throw ApiError.conflict('Existen conflictos en las franjas seleccionadas', { conflictosPorFranja });
+    }
+
+    const grupo_id = crypto.randomUUID();
+
+    const docs = datos.franjas.map((franja) => ({
+      tipo: 'semestral',
+      semestre: vigente.codigo,
+      fecha_inicio_semestre: vigente.fecha_inicio,
+      fecha_fin_semestre: vigente.fecha_fin,
+      numero_documento: datos.solicitante_documento,
+      docente: datos.solicitante_nombre,
+      dia: franja.dia,
+      hora_inicio: franja.hora_inicio,
+      hora_fin: franja.hora_fin,
+      horario: `${franja.hora_inicio} A ${franja.hora_fin}`,
+      aula: datos.nombre_salon,
+      nombre_bloque: datos.nombre_bloque,
+      materia: datos.materia,
+      facultad,
+      i_cancelada: 0,
+      grupo_id,
+      creado_manualmente: true,
+      tipo_solicitante: datos.tipo_solicitante,
+      ...(datos.responsable_documento ? { responsable_documento: datos.responsable_documento } : {}),
+      ...(datos.responsable_nombre ? { responsable_nombre: datos.responsable_nombre } : {}),
+    }));
+
+    await Programacion.insertMany(docs);
+    logger.info('Reservas semestrales manuales creadas', { grupo_id, semestre: vigente.codigo, franjas: datos.franjas.length });
+    return { grupo_id, insertados: docs.length, semestre: vigente.codigo };
+  }
+
+  /**
+   * Lista todas las reservas semestrales (todos los semestres), agrupadas por grupo_id cuando aplica.
+   */
+  async listarTodas() {
+    const todas = await reservasSemestralesRepository.findAll();
+    // Agrupa las que tienen grupo_id; los sin grupo_id se devuelven tal cual
+    const grupos = {};
+    const sinGrupo = [];
+
+    for (const r of todas) {
+      if (r.grupo_id) {
+        if (!grupos[r.grupo_id]) {
+          grupos[r.grupo_id] = { ...r, _franjas: [{ dia: r.dia, hora_inicio: r.hora_inicio, hora_fin: r.hora_fin, horario: r.horario }] };
+        } else {
+          grupos[r.grupo_id]._franjas.push({ dia: r.dia, hora_inicio: r.hora_inicio, hora_fin: r.hora_fin, horario: r.horario });
+        }
+      } else {
+        sinGrupo.push(r);
+      }
+    }
+
+    const agrupadas = Object.values(grupos);
+    return [...agrupadas, ...sinGrupo];
+  }
+
+  /**
+   * Cancela (elimina) todas las franjas de un grupo manual.
+   * @param {string} grupo_id
+   */
+  async cancelarGrupo(grupo_id) {
+    const doc = await reservasSemestralesRepository.findOneByGrupoId(grupo_id);
+    if (!doc) throw ApiError.notFound(`No se encontró el grupo "${grupo_id}"`);
+    if (!doc.creado_manualmente) throw ApiError.forbidden('Solo se pueden cancelar reservas creadas manualmente');
+    const result = await reservasSemestralesRepository.deleteByGrupoId(grupo_id);
+    logger.info('Grupo de reservas semestrales cancelado', { grupo_id, eliminados: result.deletedCount });
+    return { eliminados: result.deletedCount };
   }
 }
 

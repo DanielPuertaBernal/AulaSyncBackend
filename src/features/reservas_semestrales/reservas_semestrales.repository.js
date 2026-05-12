@@ -24,6 +24,49 @@ class ReservasSemestralesRepository {
     }).lean();
   }
 
+  /**
+   * Obtiene reservas semestrales de un salón en un día específico del semestre dado.
+   * @param {string} aula
+   * @param {string} dia
+   * @param {string} semestre - Código normalizado
+   * @returns {Promise<object[]>}
+   */
+  async findByAulaDia(aula, dia, semestre) {
+    return Programacion.find({
+      tipo: 'semestral',
+      aula,
+      dia: new RegExp(dia, 'i'),
+      semestre,
+      i_cancelada: { $ne: 1 },
+    }).lean();
+  }
+
+  /**
+   * Obtiene todas las reservas semestrales (de todos los semestres), para listado global.
+   * @returns {Promise<object[]>}
+   */
+  async findAll() {
+    return Programacion.find({ tipo: 'semestral' }).sort({ semestre: -1, grupo_id: 1, dia: 1 }).lean();
+  }
+
+  /**
+   * Elimina todas las franjas de un grupo manual.
+   * @param {string} grupo_id
+   * @returns {Promise<object>}
+   */
+  async deleteByGrupoId(grupo_id) {
+    return Programacion.deleteMany({ grupo_id, tipo: 'semestral' });
+  }
+
+  /**
+   * Encuentra al menos una franja de un grupo (para validar que existe y es manual).
+   * @param {string} grupo_id
+   * @returns {Promise<object|null>}
+   */
+  async findOneByGrupoId(grupo_id) {
+    return Programacion.findOne({ grupo_id, tipo: 'semestral' }).lean();
+  }
+
   /** @param {string} semestre @returns {Promise<object>} */
   async deleteBySemestre(semestre) {
     return Programacion.deleteMany({ semestre, tipo: 'semestral' });
