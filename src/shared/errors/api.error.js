@@ -1,10 +1,11 @@
 'use strict';
 
 class ApiError extends Error {
-  constructor(message, statusCode = 500) {
+  constructor(message, statusCode = 500, data = null) {
     super(message);
     this.name = 'ApiError';
     this.statusCode = statusCode;
+    if (data !== null) this.data = data;
     Error.captureStackTrace?.(this, ApiError);
   }
 
@@ -24,8 +25,8 @@ class ApiError extends Error {
     return new ApiError(message, 404);
   }
 
-  static conflict(message = 'Conflicto de datos') {
-    return new ApiError(message, 409);
+  static conflict(message = 'Conflicto de datos', data = null) {
+    return new ApiError(message, 409, data);
   }
 }
 

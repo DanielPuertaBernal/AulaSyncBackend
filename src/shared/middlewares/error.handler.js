@@ -44,8 +44,10 @@ function errorHandler(err, req, res, next) {
   // Errores con statusCode personalizados
   const status = err.statusCode || err.status || 500;
   const message = status < 500 ? err.message : 'Error interno del servidor';
+  const body = { ok: false, message };
+  if (err.data !== undefined) body.data = err.data;
 
-  return res.status(status).json({ ok: false, message });
+  return res.status(status).json(body);
 }
 
 module.exports = errorHandler;
