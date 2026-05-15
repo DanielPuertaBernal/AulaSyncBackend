@@ -5,6 +5,8 @@ const semestreRepository = require('../programacion/programacion.semestre.reposi
 const comunidadRepository = require('../comunidad/comunidad.repository');
 const { Programacion } = require('../programacion/programacion.schema');
 const { Salon } = require('../salones/salon.schema');
+const { Reserva } = require('../reservas/reserva.schema');
+const monitorRepository = require('../monitores/monitor.repository');
 const ApiError = require('../../shared/errors/api.error');
 const { parseExcel, cleanText, cleanDocumento, generateExcel } = require('../../shared/utils/excel.parser');
 const { createLogger } = require('../../shared/utils/logger');
@@ -47,13 +49,19 @@ function normalizarCodigoSemestre(raw) {
  * @param {string} raw
  * @returns {{ horario: string, hora_inicio: string, hora_fin: string }}
  */
+function padHora(t) {
+  if (!t) return t;
+  const [h, ...rest] = String(t).split(':');
+  return `${String(parseInt(h, 10) || 0).padStart(2, '0')}:${rest.join(':') || '00'}`;
+}
+
 function normalizarHorario(raw) {
   if (!raw) return { horario: '', hora_inicio: '', hora_fin: '' };
   const clean = String(raw).trim().replace(/\s*-{1,2}\s*/g, ' A ').replace(/\s+/g, ' ');
   const partes = clean.split(' A ');
-  if (partes.length < 2) return { horario: clean, hora_inicio: partes[0]?.trim() || '', hora_fin: '' };
-  const hora_inicio = partes[0].trim();
-  const hora_fin = partes[partes.length - 1].trim();
+  if (partes.length < 2) return { horario: clean, hora_inicio: padHora(partes[0]?.trim()) || '', hora_fin: '' };
+  const hora_inicio = padHora(partes[0].trim());
+  const hora_fin = padHora(partes[partes.length - 1].trim());
   return { horario: `${hora_inicio} A ${hora_fin}`, hora_inicio, hora_fin };
 }
 
@@ -133,7 +141,8 @@ class ReservasSemestralesService {
       }
 
       const consecutivo = cleanDocumento(row.consecutivo ?? row.Consecutivo ?? '');
-      const aulaRaw = cleanText(row.aula ?? row.Aula ?? '');
+      // Normalizar nombre de aula: quitar guiones (ej: "M-303" → "M303", "CO-303" → "CO303")
+      const aulaRaw = cleanText(row.aula ?? row.Aula ?? '').replace(/-/g, '');
       const diaRaw = cleanText(row.dia ?? row.Dia ?? row.Día ?? '');
       const horarioRaw = cleanText(row.horario ?? row.Horario ?? '');
       const responsableRaw = cleanText(row.responsable ?? row.Responsable ?? '');
@@ -306,24 +315,69 @@ class ReservasSemestralesService {
     const vigente = await semestreRepository.findVigente();
     if (!vigente) throw ApiError.notFound('No hay semestre vigente');
 
-    const overlapQuery = { hora_inicio: { $lt: hora_fin }, hora_fin: { $gt: hora_inicio } };
+    // Convierte "H:MM" o "HH:MM" a minutos desde medianoche.
+    // La comparación directa de strings falla cuando los datos vienen sin cero inicial
+    // (ej: "7:00" < "09:00" es FALSE en orden lexicográfico porque '7' > '0').
+    const toMin = (t) => {
+      const [h, m] = String(t || '0:0').split(':').map(Number);
+      return h * 60 + (m || 0);
+    };
+    const horaInicioMin = toMin(hora_inicio);
+    const horaFinMin = toMin(hora_fin);
+
+    // Expresión MongoDB: convierte un campo "hora_*" almacenado como string a minutos.
+    const campoToMin = (campo) => ({
+      $add: [
+        { $multiply: [{ $toInt: { $arrayElemAt: [{ $split: [`$${campo}`, ':'] }, 0] } }, 60] },
+        { $toInt: { $arrayElemAt: [{ $split: [`$${campo}`, ':'] }, 1] } },
+      ],
+    });
+
+    // Overlap: doc.hora_inicio < hora_fin AND doc.hora_fin > hora_inicio
+    const overlapExprConditions = [
+      { $lt: [campoToMin('hora_inicio'), horaFinMin] },
+      { $gt: [campoToMin('hora_fin'), horaInicioMin] },
+    ];
+
+    // Mapeo día español → número de día de la semana JS (0=Dom, 1=Lun, ...)
+    const DIAS_JS = { lunes: 1, martes: 2, 'miércoles': 3, miercoles: 3, jueves: 4, viernes: 5, sábado: 6, sabado: 6, domingo: 0 };
+    const diaJS = DIAS_JS[dia.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')] ?? DIAS_JS[dia.toLowerCase()];
+
+    // Obtener fechas del semestre que caen en ese día de la semana
+    let ocupadosReservas = [];
+    if (diaJS !== undefined && vigente.fecha_inicio && vigente.fecha_fin) {
+      const fechaInicio = new Date(vigente.fecha_inicio);
+      const fechaFin = new Date(vigente.fecha_fin);
+      ocupadosReservas = await Reserva.distinct('nombre_salon', {
+        estado: { $nin: ['cancelada', 'rechazada'] },
+        $expr: {
+          $and: [
+            { $gte: ['$fecha', fechaInicio] },
+            { $lte: ['$fecha', fechaFin] },
+            { $eq: [{ $dayOfWeek: '$fecha' }, (diaJS + 1) % 7 === 0 ? 7 : diaJS + 1] },
+            ...overlapExprConditions,
+          ],
+        },
+      });
+    }
+
     const [ocupadosProg, ocupadosSem] = await Promise.all([
       Programacion.distinct('aula', {
         tipo: 'programacion',
         dia: new RegExp(dia, 'i'),
         semestre: vigente.codigo,
-        ...overlapQuery,
+        $expr: { $and: overlapExprConditions },
       }),
       Programacion.distinct('aula', {
         tipo: 'semestral',
         dia: new RegExp(dia, 'i'),
         semestre: vigente.codigo,
         i_cancelada: { $ne: 1 },
-        ...overlapQuery,
+        $expr: { $and: overlapExprConditions },
       }),
     ]);
 
-    const ocupados = new Set([...ocupadosProg, ...ocupadosSem]);
+    const ocupados = new Set([...ocupadosProg, ...ocupadosSem, ...ocupadosReservas]);
     const todos = await Salon.find().sort({ nombre_bloque: 1, nombre_salon: 1 }).lean();
     const disponibles = todos.filter((s) => !ocupados.has(s.nombre_salon));
     return { salones: disponibles, semestre: vigente.codigo };
@@ -343,8 +397,9 @@ class ReservasSemestralesService {
     // Validar conflictos por franja
     const conflictosPorFranja = [];
     for (const franja of datos.franjas) {
+      const salonFranja = franja.nombre_salon || datos.nombre_salon;
       const { tiene_conflictos, conflictos } = await this.validarConflictos({
-        nombre_salon: datos.nombre_salon,
+        nombre_salon: salonFranja,
         dia: franja.dia,
         hora_inicio: franja.hora_inicio,
         hora_fin: franja.hora_fin,
@@ -372,9 +427,9 @@ class ReservasSemestralesService {
       hora_inicio: franja.hora_inicio,
       hora_fin: franja.hora_fin,
       horario: `${franja.hora_inicio} A ${franja.hora_fin}`,
-      aula: datos.nombre_salon,
-      nombre_bloque: datos.nombre_bloque,
-      materia: datos.materia,
+      aula: franja.nombre_salon || datos.nombre_salon,
+      nombre_bloque: franja.nombre_bloque || datos.nombre_bloque,
+      materia: franja.motivo || datos.materia,
       facultad,
       i_cancelada: 0,
       grupo_id,
@@ -386,6 +441,61 @@ class ReservasSemestralesService {
 
     await Programacion.insertMany(docs);
     logger.info('Reservas semestrales manuales creadas', { grupo_id, semestre: vigente.codigo, franjas: datos.franjas.length });
+
+    // Registrar monitores para cada franja
+    const esEstudiante = datos.tipo_solicitante === 'estudiante';
+    for (const franja of datos.franjas) {
+      if (!franja.dia || !franja.hora_inicio || !franja.hora_fin) continue;
+      const salonFranja = franja.nombre_salon || datos.nombre_salon;
+      const materiaFranja = franja.motivo || datos.materia;
+      const horarioFranja = `${franja.hora_inicio} A ${franja.hora_fin}`;
+
+      if (franja.monitor_documento) {
+        // Monitor explícito asignado para esta franja
+        const docente_doc = esEstudiante ? datos.responsable_documento : datos.solicitante_documento;
+        const docente_nombre = esEstudiante ? (datos.responsable_nombre || '') : datos.solicitante_nombre;
+        try {
+          const monitorPersona = await comunidadRepository.findByDocumento(franja.monitor_documento);
+          await monitorRepository.create({
+            numero_documento_docente: docente_doc,
+            nombre_docente: docente_nombre,
+            numero_documento_monitor: monitorPersona?.numero_documento || franja.monitor_documento,
+            nombre_monitor: monitorPersona?.nombre || franja.monitor_nombre || '',
+            id_carnet_monitor: monitorPersona?.id_carnet || '',
+            facultad_monitor: monitorPersona?.facultad || '',
+            correo_monitor: monitorPersona?.correo || '',
+            materia: materiaFranja,
+            aula: salonFranja,
+            horario: horarioFranja,
+            dia: franja.dia,
+          });
+          logger.info('Monitor registrado para franja semestral', { monitor: franja.monitor_documento, franja: franja.dia });
+        } catch (e) {
+          if (e.code !== 11000) logger.warn('No se pudo registrar monitor de franja', { err: e.message });
+        }
+      } else if (esEstudiante && datos.responsable_documento && datos.solicitante_documento) {
+        // El estudiante se convierte en monitor del docente responsable para esta franja
+        try {
+          await monitorRepository.create({
+            numero_documento_docente: datos.responsable_documento,
+            nombre_docente: datos.responsable_nombre || '',
+            numero_documento_monitor: persona?.numero_documento || datos.solicitante_documento,
+            nombre_monitor: persona?.nombre || datos.solicitante_nombre || '',
+            id_carnet_monitor: persona?.id_carnet || '',
+            facultad_monitor: persona?.facultad || '',
+            correo_monitor: persona?.correo || '',
+            materia: materiaFranja,
+            aula: salonFranja,
+            horario: horarioFranja,
+            dia: franja.dia,
+          });
+          logger.info('Estudiante registrado como monitor automático', { estudiante: datos.solicitante_documento, docente: datos.responsable_documento });
+        } catch (e) {
+          if (e.code !== 11000) logger.warn('No se pudo registrar monitor automático', { err: e.message });
+        }
+      }
+    }
+
     return { grupo_id, insertados: docs.length, semestre: vigente.codigo };
   }
 

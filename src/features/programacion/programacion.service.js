@@ -259,6 +259,9 @@ class ProgramacionService {
           if (mapped[k]) mapped[k] = cleanText(mapped[k]);
         });
 
+        // Normalizar nombre de aula: quitar guiones (ej: "M-303" → "M303", "CO-303" → "CO303")
+        if (mapped.aula) mapped.aula = mapped.aula.replace(/-/g, '');
+
         if (!mapped.horario && mapped.hora_inicio && mapped.hora_fin) {
           mapped.horario = `${mapped.hora_inicio} A ${mapped.hora_fin}`;
         }
