@@ -12,9 +12,21 @@ const ubicacionOficinaSchema = z.string().trim().min(1, 'ubicación requerida');
 const crearSchema = z.object({
   docente_codigo_nfc: z.string().min(1),
   docente_nombre: z.string().min(1),
+  solicitante_tipo: z.enum(['docente', 'estudiante', 'empleado', '']).optional().default(''),
+  docente_responsable_codigo: z.string().optional().default(''),
+  docente_responsable_nombre: z.string().optional().default(''),
   equipos: z.array(z.union([z.string(), z.record(z.any())])).min(1),
   auxiliar_prestamista: z.string().optional(),
   ubicacion_prestamo: ubicacionOficinaSchema.optional().default(UBICACIONES.OFICINA),
+}).superRefine((val, ctx) => {
+  if (val.solicitante_tipo === 'estudiante') {
+    if (!String(val.docente_responsable_codigo || '').trim()) {
+      ctx.addIssue({ code: 'custom', path: ['docente_responsable_codigo'], message: 'Documento del docente responsable requerido para solicitante estudiante' });
+    }
+    if (!String(val.docente_responsable_nombre || '').trim()) {
+      ctx.addIssue({ code: 'custom', path: ['docente_responsable_nombre'], message: 'Nombre del docente responsable requerido para solicitante estudiante' });
+    }
+  }
 });
 
 const devolucionSchema = z.object({

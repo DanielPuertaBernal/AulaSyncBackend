@@ -33,7 +33,7 @@ class PrestamoService {
    * Equivale a PréstamoService.crear_prestamo (Python)
    * @param {object} datos
    */
-  async crear({ docente_codigo_nfc, docente_nombre, equipos, auxiliar_prestamista, ubicacion_prestamo = UBICACION_OFICINA }) {
+  async crear({ docente_codigo_nfc, docente_nombre, solicitante_tipo = '', docente_responsable_codigo = '', docente_responsable_nombre = '', equipos, auxiliar_prestamista, ubicacion_prestamo = UBICACION_OFICINA }) {
     if (!equipos || !equipos.length) {
       throw ApiError.badRequest('Debe prestar al menos un equipo');
     }
@@ -71,6 +71,9 @@ class PrestamoService {
         prestamo = await prestamoRepository.create({
           docente_codigo_nfc,
           docente_nombre,
+          solicitante_tipo,
+          docente_responsable_codigo,
+          docente_responsable_nombre,
           auxiliar_prestamista: auxiliar_prestamista || 'Auxiliar',
           ubicacion_prestamo: ubicacionPrestamo,
           equipos: detalles,

@@ -27,6 +27,9 @@ const prestamoSchema = new mongoose.Schema(
   {
     docente_codigo_nfc: { type: String, required: true, index: true },
     docente_nombre: { type: String, default: '' },
+    solicitante_tipo: { type: String, enum: ['docente', 'estudiante', 'empleado', ''], default: '' },
+    docente_responsable_codigo: { type: String, default: '' },
+    docente_responsable_nombre: { type: String, default: '' },
     auxiliar_prestamista: { type: String, default: 'Auxiliar' },
     ubicacion_prestamo: { type: String, default: UBICACIONES.OFICINA },
     equipos: [detalleEquipoSchema],
