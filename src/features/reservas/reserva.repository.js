@@ -14,6 +14,8 @@ function fechaYmdBogota(fecha) {
   });
 }
 
+const toMin = (t) => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + (m || 0); };
+
 class ReservaRepository {
   async create(data) {
     const payload = { ...data };
@@ -71,8 +73,8 @@ class ReservaRepository {
     return candidatas.filter(
       (r) =>
         fechaYmdBogota(r.fecha) === fecha
-        && r.hora_inicio < hora_fin
-        && r.hora_fin > hora_inicio
+        && toMin(r.hora_inicio) < toMin(hora_fin)
+        && toMin(r.hora_fin) > toMin(hora_inicio)
     );
   }
 
@@ -89,9 +91,21 @@ class ReservaRepository {
       estado: { $in: ['pendiente', 'aprobada'] },
     }).lean();
 
+    const actualMin = toMin(horaActual);
     const vencidas = candidatas.filter((reserva) => {
       const fechaReserva = fechaYmdBogota(reserva.fecha);
-      return fechaReserva < fechaHoy || (fechaReserva === fechaHoy && String(reserva.hora_fin || '') <= horaActual);
+      const inicioMin = toMin(reserva.hora_inicio);
+      const finMin = toMin(reserva.hora_fin);
+
+      // Reserva que cruza medianoche (hora_fin <= hora_inicio): la fecha real de cierre es el día siguiente
+      if (finMin <= inicioMin) {
+        const d = new Date(`${fechaReserva}T12:00:00`);
+        d.setDate(d.getDate() + 1);
+        const fechaCierre = d.toLocaleDateString('en-CA', { timeZone: ZONA_HORARIA_APP, year: 'numeric', month: '2-digit', day: '2-digit' });
+        return fechaCierre < fechaHoy || (fechaCierre === fechaHoy && actualMin >= finMin);
+      }
+
+      return fechaReserva < fechaHoy || (fechaReserva === fechaHoy && actualMin >= finMin);
     });
 
     for (const reserva of vencidas) {
@@ -190,7 +204,7 @@ class ReservaRepository {
   async findBySalonYFecha(nombre_salon, fecha) {
     const reservas = await Reserva.find({
       nombre_salon,
-      estado: { $in: ['pendiente', 'aprobada'] },
+      estado: { $nin: ['cancelada', 'rechazada'] },
     }).lean();
 
     return reservas

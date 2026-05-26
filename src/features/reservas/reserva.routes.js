@@ -47,6 +47,19 @@ const validarReservaSchema = z.object({
   hora_fin: z.string().regex(/^\d{2}:\d{2}$/),
 });
 
+const editarReservaSchema = z.object({
+  nombre_bloque: z.string().optional(),
+  nombre_salon: z.string().optional(),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha debe ser YYYY-MM-DD').optional(),
+  hora_inicio: z.string().regex(/^\d{2}:\d{2}$/, 'Hora debe ser HH:MM').optional(),
+  hora_fin: z.string().regex(/^\d{2}:\d{2}$/, 'Hora debe ser HH:MM').optional(),
+  motivo: z.string().max(500).optional(),
+  forzar: z.boolean().optional().default(false),
+}).refine(
+  (val) => val.nombre_salon !== undefined || val.fecha !== undefined || val.hora_inicio !== undefined || val.hora_fin !== undefined || val.motivo !== undefined,
+  { message: 'Debe proporcionar al menos un campo para editar' }
+);
+
 /**
  * @openapi
  * /reservas/validar:
@@ -325,6 +338,13 @@ router.post(
   '/:id/cancelar',
   ...requireAuth,
   (req, res) => reservaController.cancelar(req, res)
+);
+
+router.patch(
+  '/:id',
+  ...requireAuth,
+  validate(editarReservaSchema),
+  (req, res) => reservaController.editar(req, res)
 );
 
 module.exports = router;

@@ -15,10 +15,15 @@ const ZONA_HORARIA_APP = 'America/Bogota';
 const logger = createLogger('Reservas');
 
 const SLOTS = [];
-for (let h = 7; h <= 22; h++) {
+for (let h = 6; h <= 23; h++) {
   SLOTS.push(`${String(h).padStart(2, '0')}:00`);
-  if (h < 22) SLOTS.push(`${String(h).padStart(2, '0')}:30`);
+  SLOTS.push(`${String(h).padStart(2, '0')}:30`);
 }
+
+/** Convierte "H:MM" o "HH:MM" a minutos. Evita bugs de comparación lexicográfica con horas sin cero inicial. */
+const toMin = (t) => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + (m || 0); };
+/** Regex por día de semana (índice 0=Dom..6=Sáb). Cubre nombres con y sin tilde (MIÉRCOLES/MIERCOLES, SÁBADO/SABADO). */
+const DIA_REGEX = [/domingo/i, /lunes/i, /martes/i, /mi[eé]rcoles/i, /jueves/i, /viernes/i, /s[aá]bado/i];
 
 class ReservaService {
   async _buscarConflictos(datos) {
@@ -36,20 +41,19 @@ class ReservaService {
     );
 
     // Conflictos con programación académica
-    const diaMap = { 0: 'DOMINGO', 1: 'LUNES', 2: 'MARTES', 3: 'MIERCOLES', 4: 'JUEVES', 5: 'VIERNES', 6: 'SABADO' };
     const fechaObj = new Date(`${datos.fecha}T12:00:00`);
-    const diaSemana = diaMap[fechaObj.getDay()] || '';
+    const diaRegex = DIA_REGEX[fechaObj.getDay()];
 
-    if (diaSemana) {
+    if (diaRegex) {
       const progSalon = await Programacion.find({
         aula: datos.nombre_salon,
-        dia: new RegExp(diaSemana, 'i'),
+        dia: diaRegex,
         tipo: 'programacion',
       }).lean();
 
       for (const p of progSalon) {
         if (p.hora_inicio && p.hora_fin) {
-          if (p.hora_inicio < datos.hora_fin && p.hora_fin > datos.hora_inicio) {
+          if (toMin(p.hora_inicio) < toMin(datos.hora_fin) && toMin(p.hora_fin) > toMin(datos.hora_inicio)) {
             conflictos.push({
               tipo: 'programacion',
               detalle: `${p.docente || 'Docente'} — ${p.materia || ''} (${p.hora_inicio}-${p.hora_fin})`,
@@ -65,12 +69,12 @@ class ReservaService {
         const semestrales = await Programacion.find({
           tipo: 'semestral',
           aula: datos.nombre_salon,
-          dia: new RegExp(diaSemana, 'i'),
+          dia: diaRegex,
           semestre: semestreVigente.codigo,
           i_cancelada: { $ne: 1 },
         }).lean();
         for (const s of semestrales) {
-          if (s.hora_inicio && s.hora_fin && s.hora_inicio < datos.hora_fin && s.hora_fin > datos.hora_inicio) {
+          if (s.hora_inicio && s.hora_fin && toMin(s.hora_inicio) < toMin(datos.hora_fin) && toMin(s.hora_fin) > toMin(datos.hora_inicio)) {
             conflictos.push({
               tipo: 'semestral',
               detalle: `${s.docente || 'Docente'} — ${s.materia || ''} (${s.hora_inicio}-${s.hora_fin})`,
@@ -90,6 +94,10 @@ class ReservaService {
   }
 
   async crear(datos) {
+    if (toMin(datos.hora_fin) <= toMin(datos.hora_inicio)) {
+      const ApiError = require('../../shared/errors/api.error');
+      throw ApiError.badRequest('La hora de fin debe ser posterior a la hora de inicio');
+    }
     if (!datos.forzar) {
       const conflictos = await this._buscarConflictos(datos);
       if (conflictos.length > 0) {
@@ -202,10 +210,10 @@ class ReservaService {
       throw ApiError.badRequest(`No se puede cancelar una reserva en estado "${reserva.estado}"`);
     }
 
-    const fechaHoraInicio = this._fechaHoraInicioReserva(reserva);
-    if (!fechaHoraInicio || new Date() >= fechaHoraInicio) {
+    const fechaHoraFin = this._fechaHoraFinReserva(reserva);
+    if (!fechaHoraFin || new Date() >= fechaHoraFin) {
       const ApiError = require('../../shared/errors/api.error');
-      throw ApiError.badRequest('Solo se puede cancelar una reserva antes de su hora de inicio');
+      throw ApiError.badRequest('Solo se puede cancelar una reserva antes de su hora de fin');
     }
 
     let devolucionAutomaticaRegistrada = false;
@@ -220,41 +228,170 @@ class ReservaService {
     };
   }
 
+  async editar(id, datos) {
+    const ApiError = require('../../shared/errors/api.error');
+    const reserva = await this._obtener(id);
+
+    if (!['pendiente', 'aprobada'].includes(reserva.estado)) {
+      throw ApiError.badRequest(`No se puede editar una reserva en estado "${reserva.estado}"`);
+    }
+
+    const fechaHoraFin = this._fechaHoraFinReserva(reserva);
+    const now = new Date();
+
+    if (!fechaHoraFin || now >= fechaHoraFin) {
+      throw ApiError.badRequest('La reserva ya ha finalizado y no puede ser editada');
+    }
+
+    // Effective values: new data takes precedence over existing reservation values
+    const fechaBase = new Date(reserva.fecha);
+    const fechaStrActual = `${fechaBase.getUTCFullYear()}-${String(fechaBase.getUTCMonth() + 1).padStart(2, '0')}-${String(fechaBase.getUTCDate()).padStart(2, '0')}`;
+    const nuevoSalon = datos.nombre_salon || reserva.nombre_salon;
+    const nuevaFechaStr = datos.fecha || fechaStrActual;
+    const nuevoHoraInicio = datos.hora_inicio || reserva.hora_inicio;
+    const nuevoHoraFin = datos.hora_fin || reserva.hora_fin;
+
+    if (toMin(nuevoHoraFin) <= toMin(nuevoHoraInicio)) {
+      throw ApiError.badRequest('La hora de fin debe ser posterior a la hora de inicio');
+    }
+
+    const nuevaFechaFin = new Date(`${nuevaFechaStr}T${nuevoHoraFin}:00`);
+    if (!nuevaFechaFin || Number.isNaN(nuevaFechaFin.getTime()) || nuevaFechaFin <= now) {
+      throw ApiError.badRequest('La nueva hora de fin no puede estar en el pasado');
+    }
+
+    if (!datos.forzar) {
+      const conflictosReserva = await reservaRepository.findConflictos(
+        nuevoSalon, nuevaFechaStr, nuevoHoraInicio, nuevoHoraFin, id
+      );
+      if (conflictosReserva.length > 0) {
+        const c = conflictosReserva[0];
+        const quien = c.solicitante_nombre || 'otro solicitante';
+        const motivo = c.motivo ? ` — motivo: «${c.motivo}»` : '';
+        throw ApiError.conflict(`Conflicto con reserva de ${quien}${motivo} — ${c.hora_inicio}–${c.hora_fin}`);
+      }
+
+      // También verificar cruces con programación académica y semestral
+      const fechaObjEdit = new Date(`${nuevaFechaStr}T12:00:00`);
+      const diaRegexEdit = DIA_REGEX[fechaObjEdit.getDay()];
+      if (diaRegexEdit) {
+        const [progAcademicaEdit, progSemestralEdit] = await Promise.all([
+          Programacion.find({ aula: nuevoSalon, dia: diaRegexEdit, tipo: 'programacion' }).lean(),
+          (async () => {
+            const sem = await semestreRepository.findVigente();
+            if (!sem) return [];
+            return Programacion.find({
+              tipo: 'semestral', aula: nuevoSalon, dia: diaRegexEdit,
+              semestre: sem.codigo, i_cancelada: { $ne: 1 },
+            }).lean();
+          })(),
+        ]);
+        const cruceClase = [...progAcademicaEdit, ...progSemestralEdit].find(
+          (p) => p.hora_inicio && p.hora_fin
+            && toMin(p.hora_inicio) < toMin(nuevoHoraFin)
+            && toMin(p.hora_fin) > toMin(nuevoHoraInicio)
+        );
+        if (cruceClase) {
+          const tipo = cruceClase.tipo === 'semestral' ? 'clase semestral' : 'clase programada';
+          const materia = cruceClase.materia || '';
+          const docente = cruceClase.docente || '';
+          const detallClase = [materia, docente].filter(Boolean).join(' — ');
+          const detallMsg = detallClase ? ` «${detallClase}»` : '';
+          throw ApiError.conflict(`Conflicto con ${tipo}${detallMsg} — ${cruceClase.hora_inicio}–${cruceClase.hora_fin}`);
+        }
+      }
+    }
+
+    const updates = {};
+    if (datos.nombre_bloque !== undefined) updates.nombre_bloque = datos.nombre_bloque;
+    if (datos.nombre_salon !== undefined) updates.nombre_salon = datos.nombre_salon;
+    if (datos.fecha !== undefined) updates.fecha = new Date(`${datos.fecha}T12:00:00Z`);
+    if (datos.hora_inicio !== undefined) updates.hora_inicio = datos.hora_inicio;
+    if (datos.hora_fin !== undefined) updates.hora_fin = datos.hora_fin;
+    if (datos.motivo !== undefined) updates.motivo = datos.motivo;
+
+    const reservaActualizada = await reservaRepository.updateById(id, updates);
+    logger.info('Reserva editada', { id, updates });
+    return reservaActualizada;
+  }
+
   async disponibilidad(nombre_salon, fecha) {
     const reservas = await reservaRepository.findBySalonYFecha(nombre_salon, fecha);
 
-    // Obtener programación académica para ese día
-    const diaMap = { 0: 'DOMINGO', 1: 'LUNES', 2: 'MARTES', 3: 'MIERCOLES', 4: 'JUEVES', 5: 'VIERNES', 6: 'SABADO' };
+    // Obtener programación académica y semestral para ese día
     const fechaObj = new Date(`${fecha}T12:00:00`);
-    const diaSemana = diaMap[fechaObj.getDay()] || '';
+    const diaRegex = DIA_REGEX[fechaObj.getDay()];
 
     let progAcademica = [];
-    if (diaSemana) {
-      progAcademica = await Programacion.find({
-        aula: nombre_salon,
-        dia: new RegExp(diaSemana, 'i'),
-        tipo: 'programacion',
-      }).lean();
+    let progSemestral = [];
+    if (diaRegex) {
+      [progAcademica, progSemestral] = await Promise.all([
+        Programacion.find({
+          aula: nombre_salon,
+          dia: diaRegex,
+          tipo: 'programacion',
+        }).lean(),
+        (async () => {
+          const semestreVigente = await semestreRepository.findVigente();
+          if (!semestreVigente) return [];
+          return Programacion.find({
+            tipo: 'semestral',
+            aula: nombre_salon,
+            dia: diaRegex,
+            semestre: semestreVigente.codigo,
+            i_cancelada: { $ne: 1 },
+          }).lean();
+        })(),
+      ]);
     }
+
+    // Convierte "H:MM" o "HH:MM" a minutos para comparación robusta
+    const toMin = (t) => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + (m || 0); };
 
     // Generar la lista de slots con su estado
     const slots = SLOTS.map((slot) => {
       const nextSlot = this._nextSlot(slot);
+      const slotMin = toMin(slot);
+      const nextMin = toMin(nextSlot);
 
-      // Verificar si está ocupado por programación
-      const progConflicto = progAcademica.find((p) =>
-        p.hora_inicio && p.hora_fin && p.hora_inicio < nextSlot && p.hora_fin > slot
+      // Verificar si está ocupado por reserva normal (se calcula antes para reserva_solapada)
+      const resConflicto = reservas.find((r) =>
+        toMin(r.hora_inicio) < nextMin && toMin(r.hora_fin) > slotMin
       );
+
+      // Verificar si está ocupado por programación académica
+      const progConflicto = progAcademica.find((p) =>
+        p.hora_inicio && p.hora_fin && toMin(p.hora_inicio) < nextMin && toMin(p.hora_fin) > slotMin
+      );
+      const reservaDetalle = resConflicto
+        ? [resConflicto.solicitante_nombre, resConflicto.motivo].filter(Boolean).join(' — ') || 'Reserva'
+        : undefined;
+
       if (progConflicto) {
-        return { hora: slot, disponible: false, motivo: 'programacion', detalle: progConflicto.materia || 'Clase programada' };
+        return {
+          hora: slot, disponible: false, motivo: 'programacion',
+          detalle: [progConflicto.docente, progConflicto.materia].filter(Boolean).join(' — ') || 'Clase programada',
+          ...(resConflicto ? { reserva_solapada: true, reserva_detalle: reservaDetalle } : {}),
+        };
       }
 
-      // Verificar si está ocupado por reserva
-      const resConflicto = reservas.find((r) =>
-        r.hora_inicio < nextSlot && r.hora_fin > slot
+      // Verificar si está ocupado por reserva semestral
+      const semConflicto = progSemestral.find((s) =>
+        s.hora_inicio && s.hora_fin && toMin(s.hora_inicio) < nextMin && toMin(s.hora_fin) > slotMin
       );
+      if (semConflicto) {
+        return {
+          hora: slot, disponible: false, motivo: 'semestral',
+          detalle: [semConflicto.docente, semConflicto.materia].filter(Boolean).join(' — ') || 'Reserva semestral',
+          ...(resConflicto ? { reserva_solapada: true, reserva_detalle: reservaDetalle } : {}),
+        };
+      }
+
       if (resConflicto) {
-        return { hora: slot, disponible: false, motivo: 'reserva', detalle: resConflicto.solicitante_nombre };
+        return {
+          hora: slot, disponible: false, motivo: 'reserva',
+          detalle: [resConflicto.solicitante_nombre, resConflicto.motivo].filter(Boolean).join(' — ') || 'Reserva',
+        };
       }
 
       return { hora: slot, disponible: true };
@@ -266,15 +403,14 @@ class ReservaService {
   async disponibilidadSmart(nombre_salon, fecha) {
     const reservas = await reservaRepository.findBySalonYFecha(nombre_salon, fecha);
 
-    const diaMap = { 0: 'DOMINGO', 1: 'LUNES', 2: 'MARTES', 3: 'MIERCOLES', 4: 'JUEVES', 5: 'VIERNES', 6: 'SABADO' };
     const fechaObj = new Date(`${fecha}T12:00:00`);
-    const diaSemana = diaMap[fechaObj.getDay()] || '';
+    const diaRegex = DIA_REGEX[fechaObj.getDay()];
 
     let progAcademica = [];
-    if (diaSemana) {
+    if (diaRegex) {
       progAcademica = await Programacion.find({
         aula: nombre_salon,
-        dia: new RegExp(diaSemana, 'i'),
+        dia: diaRegex,
         tipo: 'programacion',
       }).lean();
     }
@@ -314,21 +450,54 @@ class ReservaService {
 
   async salonesDisponibles(fecha, hora_inicio, hora_fin) {
     const { Salon } = require('../salones/salon.schema');
-    const salones = await Salon.find().lean();
 
-    const results = await Promise.all(
-      salones.map(async (salon) => {
-        const conflictos = await this._buscarConflictos({
-          nombre_salon: salon.nombre_salon,
-          fecha,
-          hora_inicio,
-          hora_fin,
-        });
-        return { ...salon, disponible: conflictos.length === 0 };
-      })
-    );
+    const fechaObj = new Date(`${fecha}T12:00:00`);
+    const diaRegex = DIA_REGEX[fechaObj.getDay()];
+    const horaInicioMin = toMin(hora_inicio);
+    const horaFinMin = toMin(hora_fin);
 
-    return results.filter((s) => s.disponible);
+    // Expresión MongoDB: convierte campo de hora "H:MM" / "HH:MM" a minutos (maneja datos sin cero inicial)
+    const campoToMin = (campo) => ({
+      $add: [
+        { $multiply: [{ $toInt: { $arrayElemAt: [{ $split: [`$${campo}`, ':'] }, 0] } }, 60] },
+        { $toInt: { $arrayElemAt: [{ $split: [`$${campo}`, ':'] }, 1] } },
+      ],
+    });
+    const overlapExpr = [
+      { $lt: [campoToMin('hora_inicio'), horaFinMin] },
+      { $gt: [campoToMin('hora_fin'), horaInicioMin] },
+    ];
+
+    const semestreVigente = await semestreRepository.findVigente();
+
+    const [ocupadosProg, ocupadosSem, ocupadosRes] = await Promise.all([
+      diaRegex ? Programacion.distinct('aula', {
+        tipo: 'programacion',
+        dia: diaRegex,
+        ...(semestreVigente ? { semestre: semestreVigente.codigo } : {}),
+        $expr: { $and: overlapExpr },
+      }) : Promise.resolve([]),
+      diaRegex && semestreVigente ? Programacion.distinct('aula', {
+        tipo: 'semestral',
+        dia: diaRegex,
+        semestre: semestreVigente.codigo,
+        i_cancelada: { $ne: 1 },
+        $expr: { $and: overlapExpr },
+      }) : Promise.resolve([]),
+      Reserva.distinct('nombre_salon', {
+        estado: { $nin: ['cancelada', 'rechazada'] },
+        $expr: {
+          $and: [
+            { $eq: [{ $dateToString: { format: '%Y-%m-%d', date: '$fecha', timezone: 'America/Bogota' } }, fecha] },
+            ...overlapExpr,
+          ],
+        },
+      }),
+    ]);
+
+    const ocupados = new Set([...ocupadosProg, ...ocupadosSem, ...ocupadosRes]);
+    const todos = await Salon.find().sort({ nombre_bloque: 1, nombre_salon: 1 }).lean();
+    return todos.filter((s) => !ocupados.has(s.nombre_salon));
   }
 
   _nextSlot(slot) {
@@ -400,6 +569,20 @@ class ReservaService {
     const mm = String(fecha.getUTCMonth() + 1).padStart(2, '0');
     const dd = String(fecha.getUTCDate()).padStart(2, '0');
     const fechaHora = new Date(`${yyyy}-${mm}-${dd}T${reserva.hora_inicio}:00`);
+
+    return Number.isNaN(fechaHora.getTime()) ? null : fechaHora;
+  }
+
+  _fechaHoraFinReserva(reserva) {
+    if (!reserva?.fecha || !reserva?.hora_fin) return null;
+
+    const fecha = new Date(reserva.fecha);
+    if (Number.isNaN(fecha.getTime())) return null;
+
+    const yyyy = String(fecha.getUTCFullYear());
+    const mm = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(fecha.getUTCDate()).padStart(2, '0');
+    const fechaHora = new Date(`${yyyy}-${mm}-${dd}T${reserva.hora_fin}:00`);
 
     return Number.isNaN(fechaHora.getTime()) ? null : fechaHora;
   }

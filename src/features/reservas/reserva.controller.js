@@ -47,6 +47,11 @@ class ReservaController {
     return res.json({ ok: true, data: reserva });
   }
 
+  async editar(req, res) {
+    const reserva = await reservaService.editar(req.params.id, req.body);
+    return res.json({ ok: true, data: reserva });
+  }
+
   async disponibilidad(req, res) {
     const { nombre_salon, fecha } = req.query;
     if (!nombre_salon || !fecha) {
