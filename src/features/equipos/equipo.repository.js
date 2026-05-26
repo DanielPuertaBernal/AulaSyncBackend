@@ -36,6 +36,27 @@ class EquipoRepository extends BaseRepository {
     const escaped = String(codigoBase).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return this.Model.countDocuments({ codigo_inventario: new RegExp(`^${escaped}-`, 'i') });
   }
+
+  /**
+   * Busca equipos activos cuyo nombre, marca, codigo_inventario o codigo_barras
+   * contengan el texto indicado (insensible a mayúsculas).
+   * @param {string} q - Texto a buscar
+   * @param {number} [limit=10] - Máximo de resultados
+   * @returns {Promise<object[]>}
+   */
+  async searchByText(q, limit = 10) {
+    const escaped = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escaped, 'i');
+    return this.Model.find({
+      estado: 'activo',
+      $or: [
+        { nombre: regex },
+        { marca: regex },
+        { codigo_inventario: regex },
+        { codigo_barras: regex },
+      ],
+    }).limit(limit).lean();
+  }
 }
 
 module.exports = new EquipoRepository();

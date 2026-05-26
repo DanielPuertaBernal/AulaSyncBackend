@@ -25,6 +25,11 @@ class EquipoService {
     return e;
   }
 
+  async buscarPorTexto(q) {
+    if (!q || String(q).trim().length < 2) throw ApiError.badRequest('El parámetro q debe tener al menos 2 caracteres');
+    return equipoRepository.searchByText(String(q).trim());
+  }
+
   /**
    * Registra un nuevo equipo
    * Genera código de barras automático: INV-{codigo}-{consecutivo:03d}

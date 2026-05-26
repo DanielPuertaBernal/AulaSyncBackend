@@ -28,6 +28,12 @@ class EquipoController {
     return res.json({ ok: true, data: { equipo } });
   }
 
+  /** GET /api/equipos/buscar?q=texto */
+  async buscarPorTexto(req, res) {
+    const equipos = await equipoService.buscarPorTexto(req.query.q);
+    return res.json({ ok: true, data: { equipos } });
+  }
+
   /** DELETE /api/equipos/:id */
   async eliminar(req, res) {
     await equipoService.eliminar(req.params.id);

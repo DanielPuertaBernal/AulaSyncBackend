@@ -82,6 +82,29 @@ router.get('/disponibles', ...requireAuth, (req, res) => equipoController.dispon
 
 /**
  * @openapi
+ * /equipos/buscar:
+ *   get:
+ *     tags: [Equipos]
+ *     summary: Buscar equipos activos por nombre, marca o código
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *           minLength: 2
+ *     responses:
+ *       200:
+ *         description: Lista de equipos coincidentes
+ *       400:
+ *         description: Parámetro q inválido
+ */
+router.get('/buscar', ...requireAuth, (req, res) => equipoController.buscarPorTexto(req, res));
+
+/**
+ * @openapi
  * /equipos/barcode/{codigo}:
  *   get:
  *     tags: [Equipos]
