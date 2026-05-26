@@ -157,4 +157,18 @@ router.post(
   (req, res) => notificacionController.reenviar(req, res)
 );
 
+const enviarReservasManualSchema = z.object({
+  reserva_ids: z.array(z.string().min(1)).min(1, 'Debe indicar al menos una reserva'),
+  tipo_mensaje: z.enum(['predeterminado', 'personalizado']).default('predeterminado'),
+  mensaje_personalizado: z.string().optional().default(''),
+  asunto: z.string().optional().default(''),
+});
+
+router.post(
+  '/reservas-manual',
+  ...requireAuth,
+  validate(enviarReservasManualSchema),
+  (req, res) => notificacionController.enviarManualReservas(req, res)
+);
+
 module.exports = router;

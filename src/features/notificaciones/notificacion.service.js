@@ -260,15 +260,12 @@ class NotificacionService {
   }
 
   /**
-   * Procesa notificaciones pendientes que aún no se han enviado (estado_envio='pendiente').
-   * Envía emails y actualiza estados.
+   * Procesa notificaciones pendientes que ya están listas para enviarse
+   * (estado_envio='pendiente' y sin proximo_reintento futuro).
+   * Respeta el backoff exponencial: no reintenta antes de proximo_reintento.
    */
   async procesarColaNotificaciones() {
-    const pendientes = await notificacionRepository.findHistorial(
-      { estado_envio: 'pendiente' },
-      { page: 1, limit: 50 }
-    );
-    const items = pendientes.data || pendientes;
+    const items = await notificacionRepository.findPendientesEnvio(50);
     if (!items.length) return { enviados: 0, fallidos: 0 };
 
     let enviados = 0;
@@ -348,6 +345,83 @@ class NotificacionService {
 
     logger.info('Cola de notificaciones procesada', { enviados, fallidos });
     return { enviados, fallidos };
+  }
+
+  /**
+   * Envía notificaciones manuales para un lote de reservas.
+   * Busca el correo del solicitante en comunidad y registra el envío.
+   */
+  async enviarNotificacionManualReservas({ reserva_ids, tipo_mensaje, mensaje_personalizado, asunto }, enviadoPor) {
+    const { Reserva } = require('../reservas/reserva.schema');
+    const ApiError = require('../../shared/errors/api.error');
+    if (!reserva_ids?.length) throw ApiError.badRequest('Debe indicar al menos una reserva');
+
+    const reservas = await Reserva.find({ _id: { $in: reserva_ids } }).lean();
+    if (!reservas.length) throw ApiError.notFound('No se encontraron las reservas indicadas');
+
+    const resultados = [];
+    for (const reserva of reservas) {
+      try {
+        const persona = await comunidadRepository.findByDocumento(reserva.solicitante_documento);
+        if (!persona?.correo) {
+          resultados.push({ reserva_id: reserva._id, estado: 'sin_correo', nombre: reserva.solicitante_nombre });
+          continue;
+        }
+
+        const fechaStr = new Date(reserva.fecha).toLocaleDateString('es-CO', {
+          timeZone: 'America/Bogota', year: 'numeric', month: 'long', day: 'numeric',
+        });
+
+        const asuntoFinal = asunto || 'Notificación sobre su reserva — AulaSync';
+        const htmlContent = tipo_mensaje === 'personalizado' && mensaje_personalizado
+          ? mensajePersonalizadoTemplate({
+              nombreDocente: reserva.solicitante_nombre,
+              salon: reserva.nombre_salon,
+              fechaPrestamo: fechaStr,
+              tiempoTranscurrido: '',
+              mensaje: mensaje_personalizado,
+            })
+          : reservaNoReclamadaTemplate({
+              nombreSolicitante: reserva.solicitante_nombre,
+              salon: reserva.nombre_salon,
+              fecha: fechaStr,
+              horaInicio: reserva.hora_inicio,
+              horaFin: reserva.hora_fin,
+            });
+
+        await sendEmail({ to: persona.correo, subject: asuntoFinal, html: htmlContent });
+
+        await notificacionRepository.create({
+          destinatario_nombre: reserva.solicitante_nombre,
+          destinatario_documento: reserva.solicitante_documento,
+          destinatario_correo: persona.correo,
+          tipo_mensaje: tipo_mensaje || 'predeterminado',
+          asunto: asuntoFinal,
+          mensaje: tipo_mensaje === 'personalizado' ? mensaje_personalizado : '',
+          reserva_id: reserva._id,
+          salon: reserva.nombre_salon,
+          tipo_notificacion: 'manual',
+          estado_envio: 'enviado',
+          enviado_por: enviadoPor,
+          fecha_envio: new Date(),
+          reserva_fecha: fechaStr,
+          reserva_hora_inicio: reserva.hora_inicio,
+          reserva_hora_fin: reserva.hora_fin,
+        });
+
+        resultados.push({ reserva_id: reserva._id, estado: 'enviado', correo: persona.correo, nombre: reserva.solicitante_nombre });
+      } catch (err) {
+        logger.error('Fallo envío manual reserva', { reservaId: reserva._id, error: err.message });
+        resultados.push({ reserva_id: reserva._id, estado: 'fallido', error: err.message, nombre: reserva.solicitante_nombre });
+      }
+    }
+
+    const enviados = resultados.filter((r) => r.estado === 'enviado').length;
+    const fallidos = resultados.filter((r) => r.estado === 'fallido').length;
+    const sinCorreo = resultados.filter((r) => r.estado === 'sin_correo').length;
+
+    logger.info('Notificaciones manuales de reservas enviadas', { enviados, fallidos, sinCorreo, total: reservas.length });
+    return { enviados, fallidos, sin_correo: sinCorreo, total: reservas.length, detalle: resultados };
   }
 
   _extraerBloque(aula) {

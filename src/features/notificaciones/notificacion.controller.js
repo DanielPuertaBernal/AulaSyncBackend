@@ -41,6 +41,16 @@ class NotificacionController {
     const resultado = await notificacionService.reenviar(req.params.id);
     return res.json({ ok: true, data: resultado });
   }
+  /** POST /api/notificaciones/reservas-manual */
+  async enviarManualReservas(req, res) {
+    const enviadoPor = req.user?.nombre || req.user?.usuario || 'desconocido';
+    const resultado = await notificacionService.enviarNotificacionManualReservas(req.body, enviadoPor);
+    return res.json({
+      ok: true,
+      message: `Notificaciones enviadas: ${resultado.enviados} de ${resultado.total}`,
+      data: resultado,
+    });
+  }
 }
 
 module.exports = new NotificacionController();

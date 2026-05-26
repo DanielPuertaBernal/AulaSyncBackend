@@ -73,6 +73,24 @@ class NotificacionRepository {
     }).lean();
   }
 
+  /**
+   * Devuelve hasta `limit` notificaciones listas para enviar:
+   * estado pendiente Y (sin reintento programado OR reintento ya vencido).
+   */
+  async findPendientesEnvio(limit = 50) {
+    const ahora = new Date();
+    return Notificacion.find({
+      estado_envio: 'pendiente',
+      $or: [
+        { proximo_reintento: null },
+        { proximo_reintento: { $lte: ahora } },
+      ],
+    })
+      .sort({ fecha_envio: 1 })
+      .limit(limit)
+      .lean();
+  }
+
   async estadisticas() {
     const [porEstado, porTipo] = await Promise.all([
       Notificacion.aggregate([
