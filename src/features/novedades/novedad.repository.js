@@ -15,7 +15,11 @@ class NovedadRepository {
     return Novedad.findByIdAndUpdate(id, { $set: updates }, { new: true }).lean();
   }
 
-  async findHistorial(filters = {}, pagination = null) {
+  async findByPrestamoRef(prestamoId) {
+    return Novedad.findOne({ prestamo_ref: prestamoId }).lean();
+  }
+
+  async findAll(filters = {}, pagination = null) {
     const query = {};
     if (filters.tipo_recurso) query.tipo_recurso = filters.tipo_recurso;
     if (filters.estado) query.estado = filters.estado;

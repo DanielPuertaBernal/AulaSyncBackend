@@ -16,7 +16,7 @@ const novedadSchema = new mongoose.Schema(
     salon: { type: String, default: '' },
     categoria: {
       type: String,
-      enum: ['sin_novedad', 'daño_fisico', 'no_funciona', 'perdida', 'otro'],
+      enum: ['sin_novedad', 'daño_fisico', 'no_funciona', 'perdida', 'otro', 'demora_entrega'],
       required: true,
     },
     descripcion: { type: String, maxlength: 500, default: '' },

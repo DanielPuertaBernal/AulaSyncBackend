@@ -16,7 +16,7 @@ class NovedadService {
   }
 
   async listar(filters, pagination) {
-    return novedadRepository.findHistorial(filters, pagination);
+    return novedadRepository.findAll(filters, pagination);
   }
 
   async obtenerPorId(id) {

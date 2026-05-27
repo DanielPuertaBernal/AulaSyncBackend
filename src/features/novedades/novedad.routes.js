@@ -14,7 +14,7 @@ const registrarNovedadSchema = z.object({
   reportado_por: z.string().optional().default(''),
   reportado_por_nombre: z.string().optional().default(''),
   salon: z.string().optional().default(''),
-  categoria: z.enum(['sin_novedad', 'daño_fisico', 'no_funciona', 'perdida', 'otro']),
+  categoria: z.enum(['sin_novedad', 'daño_fisico', 'no_funciona', 'perdida', 'otro', 'demora_entrega']),
   descripcion: z.string().max(500).optional().default(''),
 });
 
