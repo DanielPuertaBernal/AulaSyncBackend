@@ -3,9 +3,9 @@ const { Llave } = require('./llave.schema');
 const { applyPagination } = require('../../shared/utils/pagination.helper');
 
 class LlaveRepository {
-  /** @returns {Promise<object[]>} Registros con estado 'en_prestamo' */
+  /** @returns {Promise<object[]>} Registros con préstamo activo (en_prestamo, en_mora, demora_entrega) */
   async findPendientes() {
-    return Llave.find({ estado: 'en_prestamo' }).lean();
+    return Llave.find({ estado: { $in: ['en_prestamo', 'en_mora', 'demora_entrega'] } }).lean();
   }
 
   /** @param {string} documento @returns {Promise<object|null>} */
@@ -24,7 +24,7 @@ class LlaveRepository {
   async findPendientesByFecha(fechaStr) {
     const start = new Date(`${fechaStr}T00:00:00`);
     const end = new Date(`${fechaStr}T23:59:59.999`);
-    return Llave.find({ estado: 'en_prestamo', fecha_hora_entrega: { $gte: start, $lte: end } }).lean();
+    return Llave.find({ estado: { $in: ['en_prestamo', 'en_mora', 'demora_entrega'] }, fecha_hora_entrega: { $gte: start, $lte: end } }).lean();
   }
 
   /** @param {object} filters @param {object|null} pagination @returns {Promise<object>} */

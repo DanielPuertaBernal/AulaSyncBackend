@@ -32,7 +32,7 @@ const llaveSchema = new mongoose.Schema(
     nombre_entrega: { type: String, default: '' },
     estado: {
       type: String,
-      enum: ['en_prestamo', 'entregado', 'demora_entrega'],
+      enum: ['en_prestamo', 'en_mora', 'demora_entrega', 'entregado'],
       default: 'en_prestamo',
       index: true,
     },

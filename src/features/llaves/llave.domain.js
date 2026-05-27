@@ -330,41 +330,29 @@ function construirDatosDevolucion({
 }
 
 /**
- * Calcula el estado visual de un registro según su antigüedad.
+ * Devuelve el estado real del registro.
+ * Los estados (en_mora, demora_entrega) son escritos por el scheduler según
+ * la configuración del admin; ya no se calculan con un hardcode visual.
  * @param {Object} registro
- * @param {number} limiteHorasDemora - Horas tras fin de clase para marcar como 'demora_entrega'
- * @returns {'entregado'|'en_prestamo'|'demora_entrega'}
+ * @param {number} _limiteHorasDemora - obsoleto, mantenido por compatibilidad
+ * @returns {'entregado'|'en_prestamo'|'en_mora'|'demora_entrega'}
  */
-function calcularEstadoVisual(registro, limiteHorasDemora = 4) {
-  if (registro?.fecha_hora_devolucion) {
-    return 'entregado';
-  }
-
-  const estadoActual = registro?.estado || '';
-  if (estadoActual !== 'en_prestamo') return estadoActual;
-
-  const fechaEntrega = registro?.fecha_hora_entrega instanceof Date
-    ? registro.fecha_hora_entrega
-    : (registro?.fecha_hora_entrega ? new Date(registro.fecha_hora_entrega) : null);
-  if (!fechaEntrega || Number.isNaN(fechaEntrega.getTime())) return estadoActual;
-
-  const horario = normalizeHorario(registro?.horario).split(' A ');
-  if (horario.length < 2) return estadoActual;
-
-  const finMinutos = horaAMinutos(String(horario[1] || '').trim());
-  if (finMinutos === null) return estadoActual;
-
-  const finClase = new Date(fechaEntrega);
-  finClase.setHours(Math.floor(finMinutos / 60), finMinutos % 60, 0, 0);
-
-  const umbralDemora = new Date(finClase.getTime() + (limiteHorasDemora * 60 * 60 * 1000));
-  return new Date() > umbralDemora ? 'demora_entrega' : estadoActual;
+function calcularEstadoVisual(registro, _limiteHorasDemora) {
+  if (registro?.fecha_hora_devolucion) return 'entregado';
+  return registro?.estado || 'en_prestamo';
 }
 
 /** Transforma un registro de BD al formato esperado por el frontend. */
 function toClientFormat(registro, limiteHorasDemora = 4) {
-  const formatDate = (value) => (value instanceof Date ? value.toISOString().split('T')[0] : '');
-  const formatTime = (value) => (value instanceof Date ? value.toTimeString().split(' ')[0] : '');
+  // Usar timezone Bogotá (UTC-5, sin DST) para que la fecha sea correcta aunque el servidor corra en UTC
+  const formatDate = (value) =>
+    value instanceof Date
+      ? value.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+      : '';
+  const formatTime = (value) =>
+    value instanceof Date
+      ? value.toLocaleTimeString('en-GB', { timeZone: 'America/Bogota', hour12: false })
+      : '';
 
   return {
     _id: registro?._id,
