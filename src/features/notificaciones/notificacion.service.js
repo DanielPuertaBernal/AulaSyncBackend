@@ -3,6 +3,9 @@ const notificacionRepository = require('./notificacion.repository');
 const configuracionService = require('../configuracion/configuracion.service');
 const llaveRepository = require('../llaves/llave.repository');
 const comunidadRepository = require('../comunidad/comunidad.repository');
+const salonRepository = require('../salones/salon.repository');
+const novedadRepository = require('../novedades/novedad.repository');
+const novedadService = require('../novedades/novedad.service');
 const { sendEmail, sendBulkEmails } = require('../../shared/email/email.service');
 const {
   devolucionLlaveTemplate,
@@ -117,6 +120,10 @@ class NotificacionService {
     return notificacionRepository.estadisticas();
   }
 
+  async obtenerContadoresRecordatorios() {
+    return notificacionRepository.contarRecordatoriosPorLlaves();
+  }
+
   async reenviar(notificacionId) {
     const notif = await notificacionRepository.findById(notificacionId);
     if (!notif) {
@@ -184,8 +191,12 @@ class NotificacionService {
 
     for (const prestamo of pendientes) {
       try {
-        const bloque = this._extraerBloque(prestamo.aula);
-        const config = await configuracionService.obtenerPorBloque(bloque);
+        const salon = await salonRepository.findByNombre(prestamo.aula);
+        const nombreBloque = salon?.nombre_bloque || this._extraerBloque(prestamo.aula);
+        if (!salon) {
+          logger.warn('Salon no encontrado en BD para lookup de configuracion, usando extraccion regex', { aula: prestamo.aula });
+        }
+        const config = await configuracionService.obtenerPorBloque(nombreBloque);
 
         if (!config.notificaciones_activas) continue;
 
@@ -195,15 +206,31 @@ class NotificacionService {
         if (horaFinStr) {
           const [h, m] = horaFinStr.split(':').map(Number);
           if (!Number.isNaN(h) && !Number.isNaN(m)) {
-            finClase = new Date(prestamo.fecha_hora_entrega);
-            finClase.setHours(h, m, 0, 0);
+            // Construir finClase en timezone America/Bogota (UTC-5, sin DST)
+            const fechaBase = new Date(prestamo.fecha_hora_entrega);
+            const fechaBogota = fechaBase.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+            finClase = new Date(`${fechaBogota}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-05:00`);
           }
         }
         if (!finClase) finClase = new Date(prestamo.fecha_hora_entrega);
 
         const minutosTranscurridos = (ahora - finClase) / (1000 * 60);
         if (minutosTranscurridos < 0) continue;
-        if (minutosTranscurridos <= config.tiempo_maximo_prestamo_minutos) continue;
+        if (minutosTranscurridos < config.tiempo_maximo_prestamo_minutos) continue;
+
+        // Préstamo ya en estado crítico → solo garantizar que exista la novedad
+        if (prestamo.estado === 'demora_entrega') {
+          const novedadExistente = await novedadRepository.findByPrestamoRef(prestamo._id);
+          if (!novedadExistente) {
+            await novedadService.registrar(this._construirNovedadDemora(prestamo, config, minutosTranscurridos));
+          }
+          continue;
+        }
+
+        // Transición: en_prestamo → en_mora
+        if (prestamo.estado === 'en_prestamo') {
+          await llaveRepository.update(prestamo._id, { estado: 'en_mora' });
+        }
 
         // Buscar correo del docente en comunidad
         const persona = await comunidadRepository.findByDocumento(prestamo.numero_documento);
@@ -217,6 +244,16 @@ class NotificacionService {
           prestamo._id,
           'vencimiento_inicial'
         );
+
+        // Transición: en_mora → demora_entrega (todos los recordatorios enviados)
+        if (notifEnviadas >= config.max_recordatorios) {
+          await llaveRepository.update(prestamo._id, { estado: 'demora_entrega' });
+          const novedadExistente = await novedadRepository.findByPrestamoRef(prestamo._id);
+          if (!novedadExistente) {
+            await novedadService.registrar(this._construirNovedadDemora(prestamo, config, minutosTranscurridos));
+          }
+          continue;
+        }
 
         if (!tieneVencimientoInicial) {
           registrosACrear.push(
@@ -287,8 +324,9 @@ class NotificacionService {
             horaFin: notif.reserva_hora_fin || '',
           });
         } else if (notif.tipo_notificacion === 'recordatorio' || notif.tipo_notificacion === 'vencimiento_inicial') {
-          const bloque = this._extraerBloque(notif.salon || '');
-          const configBloque = await configuracionService.obtenerPorBloque(bloque);
+          const salonDoc = await salonRepository.findByNombre(notif.salon || '');
+          const nombreBloqueNotif = salonDoc?.nombre_bloque || this._extraerBloque(notif.salon || '');
+          const configBloque = await configuracionService.obtenerPorBloque(nombreBloqueNotif);
           htmlContent = recordatorioDevolucionTemplate({
             nombreDocente: notif.destinatario_nombre,
             salon: notif.salon,
@@ -296,6 +334,8 @@ class NotificacionService {
             tiempoTranscurrido,
             numeroRecordatorio: notif.numero_recordatorio || 1,
             tiempoLimiteMinutos: configBloque.tiempo_maximo_prestamo_minutos,
+            horario: notif.horario_clase || '',
+            materia: notif.materia || '',
           });
         } else {
           htmlContent = devolucionLlaveTemplate({
@@ -424,6 +464,20 @@ class NotificacionService {
     return { enviados, fallidos, sin_correo: sinCorreo, total: reservas.length, detalle: resultados };
   }
 
+  _construirNovedadDemora(prestamo, config, minutosTranscurridos) {
+    return {
+      tipo_recurso: 'llave',
+      recurso_id: prestamo._id,
+      prestamo_ref: prestamo._id,
+      reportado_por: prestamo.numero_documento,
+      reportado_por_nombre: prestamo.docente || '',
+      salon: prestamo.aula || '',
+      categoria: 'demora_entrega',
+      descripcion: `Llave del sal\u00f3n ${prestamo.aula || 'desconocido'} no devuelta tras ${config.max_recordatorios} recordatorio(s). Docente: ${prestamo.docente || prestamo.numero_documento}. Horario: ${prestamo.horario || 'No registrado'}. Materia: ${prestamo.materia || 'No especificada'}. Tiempo en mora: ${Math.round(minutosTranscurridos)} min.`,
+      estado: 'abierta',
+    };
+  }
+
   _extraerBloque(aula) {
     if (!aula) return '';
     // Aula format: "J-101", "M-203", etc. Extract block letter(s) before the dash
@@ -448,6 +502,8 @@ class NotificacionService {
       enviado_por: 'sistema',
       fecha_envio: new Date(),
       fecha_hora_prestamo: prestamo.fecha_hora_entrega || null,
+      horario_clase: prestamo.horario || '',
+      materia: prestamo.materia || '',
     };
   }
 }

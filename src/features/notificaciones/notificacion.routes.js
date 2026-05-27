@@ -129,6 +129,12 @@ router.get(
   (req, res) => notificacionController.estadisticas(req, res)
 );
 
+router.get(
+  '/contadores-recordatorios',
+  ...requireAuth,
+  (req, res) => notificacionController.contadoresRecordatorios(req, res)
+);
+
 /**
  * @openapi
  * /notificaciones/reenviar/{id}:

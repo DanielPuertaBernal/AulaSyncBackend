@@ -37,6 +37,8 @@ const notificacionSchema = new mongoose.Schema(
     reserva_fecha: { type: String, default: '' },
     reserva_hora_inicio: { type: String, default: '' },
     reserva_hora_fin: { type: String, default: '' },
+    horario_clase: { type: String, default: '' },
+    materia: { type: String, default: '' },
   },
   {
     collection: 'notificaciones',

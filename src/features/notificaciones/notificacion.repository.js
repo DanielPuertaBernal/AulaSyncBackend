@@ -59,6 +59,18 @@ class NotificacionRepository {
     });
   }
 
+  /** Devuelve un mapa { [llave_id]: count } con los recordatorios enviados por préstamo */
+  async contarRecordatoriosPorLlaves() {
+    const result = await Notificacion.aggregate([
+      { $match: { tipo_notificacion: 'recordatorio', estado_envio: 'enviado' } },
+      { $group: { _id: '$prestamo_llave_id', count: { $sum: 1 } } },
+    ]);
+    return result.reduce((acc, r) => {
+      if (r._id) acc[r._id.toString()] = r.count;
+      return acc;
+    }, {});
+  }
+
   async findLastByPrestamo(prestamoLlaveId) {
     return Notificacion.findOne({ prestamo_llave_id: prestamoLlaveId })
       .sort({ fecha_envio: -1 })

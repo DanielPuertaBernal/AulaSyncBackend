@@ -36,6 +36,12 @@ class NotificacionController {
     return res.json({ ok: true, data });
   }
 
+  /** GET /api/notificaciones/contadores-recordatorios */
+  async contadoresRecordatorios(_req, res) {
+    const data = await notificacionService.obtenerContadoresRecordatorios();
+    return res.json({ ok: true, data });
+  }
+
   /** POST /api/notificaciones/reenviar/:id */
   async reenviar(req, res) {
     const resultado = await notificacionService.reenviar(req.params.id);
