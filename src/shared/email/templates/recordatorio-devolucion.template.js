@@ -7,6 +7,8 @@ function recordatorioDevolucionTemplate({
   tiempoTranscurrido,
   numeroRecordatorio,
   tiempoLimiteMinutos,
+  horario = '',
+  materia = '',
 }) {
   const esUrgente = numeroRecordatorio >= 3;
   const headerColor = esUrgente ? '#dc2626' : '#f59e0b';
@@ -55,7 +57,9 @@ function recordatorioDevolucionTemplate({
                   <td style="padding:16px;">
                     <p style="margin:0 0 8px;color:${esUrgente ? '#dc2626' : '#d97706'};font-size:13px;font-weight:600;">Datos del préstamo:</p>
                     <p style="margin:0;color:#1e3a5f;font-size:13px;line-height:1.8;">
+                      ${materia ? `<strong>Clase/Asignatura:</strong> ${materia}<br/>` : ''}
                       <strong>Salón:</strong> ${salon}<br/>
+                      ${horario ? `<strong>Franja horaria:</strong> ${horario}<br/>` : ''}
                       <strong>Fecha de préstamo:</strong> ${fechaPrestamo}<br/>
                       <strong>Tiempo transcurrido:</strong> ${tiempoTranscurrido}<br/>
                       <strong>Recordatorio:</strong> #${numeroRecordatorio}

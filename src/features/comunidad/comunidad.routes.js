@@ -1,7 +1,7 @@
 'use strict';
 const { Router } = require('express');
 const comunidadController = require('./comunidad.controller');
-const { requireAuth } = require('../auth/auth.middleware');
+const { requireAuth, requireAdmin } = require('../auth/auth.middleware');
 
 const router = Router();
 
@@ -158,5 +158,8 @@ router.get('/:documento', ...requireAuth, (req, res) => comunidadController.obte
  */
 // Endpoint de sincronización — sin autenticación (sistema externo)
 router.post('/sync', (req, res) => comunidadController.sync(req, res));
+
+router.patch('/:id', ...requireAdmin, (req, res) => comunidadController.actualizar(req, res));
+router.delete('/:id', ...requireAdmin, (req, res) => comunidadController.eliminar(req, res));
 
 module.exports = router;

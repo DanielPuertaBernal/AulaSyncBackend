@@ -23,6 +23,18 @@ class ComunidadController {
     return res.json({ ok: true, data: { persona } });
   }
 
+  /** PATCH /api/comunidad/:id */
+  async actualizar(req, res) {
+    const persona = await comunidadService.actualizar(req.params.id, req.body);
+    return res.json({ ok: true, data: { persona } });
+  }
+
+  /** DELETE /api/comunidad/:id */
+  async eliminar(req, res) {
+    await comunidadService.eliminar(req.params.id);
+    return res.json({ ok: true, message: 'Persona eliminada correctamente' });
+  }
+
   /** POST /api/comunidad/sync - Sincroniza registros desde sistema externo */
   async sync(req, res) {
     const resultado = await comunidadService.sync(req.body);

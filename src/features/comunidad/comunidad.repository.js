@@ -44,6 +44,21 @@ class ComunidadRepository {
     );
   }
 
+  /** @param {string} id - MongoDB _id @returns {Promise<object|null>} */
+  async findById(id) {
+    return Comunidad.findById(id).lean();
+  }
+
+  /** @param {string} id @param {object} data @returns {Promise<object|null>} */
+  async updateById(id, data) {
+    return Comunidad.findByIdAndUpdate(id, { $set: data }, { new: true, lean: true });
+  }
+
+  /** @param {string} id @returns {Promise<object|null>} */
+  async deleteById(id) {
+    return Comunidad.findByIdAndDelete(id).lean();
+  }
+
   /** @param {object[]} registros @returns {Promise<{insertados: number, actualizados: number}>} */
   async upsertMany(registros) {
     const ops = registros.map((r) => ({

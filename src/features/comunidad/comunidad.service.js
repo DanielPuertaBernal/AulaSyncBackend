@@ -54,6 +54,30 @@ class ComunidadService {
     return { sincronizados: validados.length, ...resultado };
   }
 
+  async actualizar(id, data) {
+    const persona = await comunidadRepository.findById(id);
+    if (!persona) throw ApiError.notFound('Persona no encontrada');
+
+    const CAMPOS_PERMITIDOS = ['nombre', 'tipo', 'facultad', 'correo', 'id_carnet'];
+    const actualizado = {};
+    for (const campo of CAMPOS_PERMITIDOS) {
+      if (data[campo] !== undefined) actualizado[campo] = String(data[campo]).trim();
+    }
+    if (actualizado.tipo && !TIPOS_COMUNIDAD.includes(actualizado.tipo)) {
+      throw ApiError.badRequest(`tipo debe ser uno de: ${TIPOS_COMUNIDAD.join(', ')}`);
+    }
+    if (actualizado.correo) actualizado.correo = actualizado.correo.toLowerCase();
+    if (!Object.keys(actualizado).length) throw ApiError.badRequest('No hay campos para actualizar');
+
+    return comunidadRepository.updateById(id, actualizado);
+  }
+
+  async eliminar(id) {
+    const persona = await comunidadRepository.deleteById(id);
+    if (!persona) throw ApiError.notFound('Persona no encontrada');
+    return persona;
+  }
+
   _validarRegistro(r, idx) {
     if (!r.numero_documento?.trim()) {
       throw ApiError.badRequest(`Registro ${idx}: numero_documento es requerido`);
