@@ -76,7 +76,7 @@ class LlaveController {
         tipo_recurso: 'llave',
         recurso_id: result.registro?._id || result.registro?.id,
         prestamo_ref: result.registro?._id || result.registro?.id,
-        reportado_por: req.user?.id,
+        reportado_por: req.user.sub,
         reportado_por_nombre: req.user?.nombre || 'Auxiliar',
         salon: result.registro?.salon || result.registro?.nombre_salon || '',
         categoria: req.body.novedad.categoria,
