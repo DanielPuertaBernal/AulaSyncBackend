@@ -36,6 +36,10 @@ const devolucionSchema = z.object({
   equipos: z.array(z.union([z.string(), z.record(z.any())])).optional().default([]),
   auxiliar_que_recibio: z.string().optional(),
   ubicacion_devolucion: ubicacionOficinaSchema.optional().default(UBICACIONES.OFICINA),
+  novedad: z.object({
+    categoria: z.enum(['sin_novedad', 'daño_fisico', 'no_funciona', 'perdida', 'otro']),
+    descripcion: z.string().max(500).optional().default(''),
+  }).optional(),
 });
 
 /**

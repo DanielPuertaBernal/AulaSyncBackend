@@ -45,7 +45,7 @@ class PrestamoController {
         tipo_recurso: 'equipo',
         recurso_id: req.body.prestamo_id,
         prestamo_ref: req.body.prestamo_id,
-        reportado_por: req.user?.id,
+        reportado_por: req.user.sub,
         reportado_por_nombre: req.user?.nombre || 'Auxiliar',
         salon: '',
         categoria: req.body.novedad.categoria,
