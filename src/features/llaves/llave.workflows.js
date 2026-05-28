@@ -26,6 +26,7 @@ function createLlaveWorkflows({
   resolverContextoNFC,
   buscarClaseParaConfirmacion,
   findPendienteByDocumento,
+  findRegistroById,
   findReservaPendienteNFCByDocumento,
   findReservaById,
   marcarReservaCheckinNFC,
@@ -205,6 +206,17 @@ function createLlaveWorkflows({
       return resolverResultadoDevolucion({ contexto, persona, documento, ubicacion });
     }
 
+    // Múltiples préstamos activos: el docente debe elegir cuál devolver
+    if (contexto.prestamosActivos && contexto.prestamosActivos.length > 1) {
+      return {
+        tipo: 'seleccion_devolucion',
+        docente: persona,
+        prestamosActivos: contexto.prestamosActivos,
+        id_carnet: idCarnet,
+        ubicacion,
+      };
+    }
+
     return resolverResultadoPrestamo({ contexto, persona, documento, ubicacion });
   }
 
@@ -259,7 +271,7 @@ function createLlaveWorkflows({
 
     const existing = await findPendienteByDocumento(docenteDoc);
     if (existing) {
-      throw ApiError.conflict('Ya hay una llave prestada para este docente');
+      // Ya no bloqueamos: el docente puede tener múltiples llaves
     }
 
     const docente = await findDocenteByDocumento(docenteDoc);
@@ -302,10 +314,6 @@ function createLlaveWorkflows({
     validarEntregaManual(infoClase);
 
     const documento = normalizarDocumento(infoClase.nroidenti);
-    const existing = await findPendienteByDocumento(documento);
-    if (existing) {
-      throw ApiError.conflict('El docente ya tiene una llave prestada');
-    }
 
     const registro = construirRegistroEntregaManual({
       infoClase,
@@ -338,11 +346,27 @@ function createLlaveWorkflows({
     return { ok: true, ...result };
   }
 
+  /** Registra la devolución de una llave específica por su _id (cuando el docente tiene varias). */
+  async function registrarDevolucionPorId(registroId, ubicacion) {
+    const registro = await findRegistroById(registroId);
+    if (!registro || !['en_prestamo', 'en_mora', 'demora_entrega'].includes(registro.estado)) {
+      throw ApiError.notFound('No se encontró llave en préstamo con ese identificador');
+    }
+
+    const ubicacionDevolucion = await normalizarUbicacionDevolucion(ubicacion);
+    const result = await persistirDevolucion(registro, {
+      canal: 'nfc_seleccion',
+      ubicacion: ubicacionDevolucion,
+    });
+    return { ok: true, ...result };
+  }
+
   return {
     procesarLecturaNFC,
     confirmarPrestamoAnticipado,
     registrarEntrega,
     registrarDevolucion,
+    registrarDevolucionPorId,
   };
 }
 

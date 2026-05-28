@@ -87,6 +87,14 @@ class LlaveController {
     return res.json({ ok: true, message: result.mensaje, data: { registro: result.registro } });
   }
 
+  /** POST /api/llaves/devolver-registro/:id — Devolución por ID específico (múltiples llaves) */
+  async devolverPorId(req, res) {
+    const { id } = req.params;
+    const ubicacion = req.body?.ubicacion || UBICACION_OFICINA;
+    const result = await llaveService.registrarDevolucionPorId(id, ubicacion);
+    return res.json({ ok: true, message: result.mensaje, data: { registro: result.registro } });
+  }
+
   /** GET /api/llaves/historial/exportar - Descarga Excel */
   async exportarHistorial(req, res) {
     const { fecha, documento, estado } = req.query;

@@ -272,5 +272,6 @@ router.post('/entregar', ...requireAuth, validate(entregarSchema), (req, res) =>
  *         $ref: '#/components/schemas/ErrorNoEncontrado'
  */
 router.post('/devolver/:documento', ...requireAuth, (req, res) => llaveController.devolver(req, res));
+router.post('/devolver-registro/:id', ...requireAuth, (req, res) => llaveController.devolverPorId(req, res));
 
 module.exports = router;

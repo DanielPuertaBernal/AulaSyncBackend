@@ -53,6 +53,7 @@ class LlaveService {
       resolverContextoNFC,
       buscarClaseParaConfirmacion,
       findPendienteByDocumento: (documento) => llaveRepository.findPendienteByDocumento(documento),
+      findRegistroById: (id) => llaveRepository.findById(id),
       findReservaPendienteNFCByDocumento: (documento, now) => reservaRepository.findReservaPendienteNFCByDocumento(documento, now),
       findReservaById: (id) => reservaRepository.findById(id),
       marcarReservaCheckinNFC: (payload) => reservaRepository.marcarCheckinNFC(payload),
@@ -137,6 +138,11 @@ class LlaveService {
   async registrarDevolucion(documento, ubicacion = UBICACION_OFICINA) {
     logger.info('Registrando devolución de llave', { documento, ubicacion });
     return this.workflows.registrarDevolucion(documento, ubicacion);
+  }
+
+  async registrarDevolucionPorId(registroId, ubicacion = UBICACION_OFICINA) {
+    logger.info('Registrando devolución de llave por ID', { registroId, ubicacion });
+    return this.workflows.registrarDevolucionPorId(registroId, ubicacion);
   }
 
   async exportarHistorial(filters = {}) {

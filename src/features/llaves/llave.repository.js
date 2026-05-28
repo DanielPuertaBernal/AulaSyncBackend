@@ -10,7 +10,17 @@ class LlaveRepository {
 
   /** @param {string} documento @returns {Promise<object|null>} */
   async findPendienteByDocumento(documento) {
-    return Llave.findOne({ numero_documento: documento, estado: 'en_prestamo' }).lean();
+    return Llave.findOne({ numero_documento: documento, estado: { $in: ['en_prestamo', 'en_mora', 'demora_entrega'] } }).lean();
+  }
+
+  /** @param {string} documento @returns {Promise<object[]>} Todos los préstamos activos del docente */
+  async findPendientesByDocumento(documento) {
+    return Llave.find({ numero_documento: documento, estado: { $in: ['en_prestamo', 'en_mora', 'demora_entrega'] } }).lean();
+  }
+
+  /** @param {string} id @returns {Promise<object|null>} */
+  async findById(id) {
+    return Llave.findById(id).lean();
   }
 
   /** @param {string} fechaStr - Formato YYYY-MM-DD @returns {Promise<object[]>} */

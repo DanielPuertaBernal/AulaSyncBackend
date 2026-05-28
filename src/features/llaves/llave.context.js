@@ -52,11 +52,14 @@ async function buscarPersonaPorCarnet(idCarnet) {
  * @returns {Promise<{ rol, docente, prestamoActivo, clasesDisponibles, mensajeSinClase? }>}
  */
 async function resolverContextoNFC(persona, documento) {
-  // Priorizar devolución: si el documento escaneado ya tiene llave en préstamo,
+  // Priorizar devolución: si el documento escaneado ya tiene llaves en préstamo,
   // debe permitirse devolver incluso sin clases en programación.
-  const prestamoActivo = await llaveRepository.findPendienteByDocumento(documento);
-  if (prestamoActivo) {
-    return { rol: 'docente', docente: persona, prestamoActivo, clasesDisponibles: [] };
+  const prestamosActivos = await llaveRepository.findPendientesByDocumento(documento);
+  if (prestamosActivos.length === 1) {
+    return { rol: 'docente', docente: persona, prestamoActivo: prestamosActivos[0], prestamosActivos, clasesDisponibles: [] };
+  }
+  if (prestamosActivos.length > 1) {
+    return { rol: 'docente', docente: persona, prestamoActivo: null, prestamosActivos, clasesDisponibles: [] };
   }
 
   const diaActual = getDiaActual();
@@ -83,9 +86,12 @@ async function resolverContextoNFC(persona, documento) {
 
 /** Resuelve contexto cuando la persona es un docente con clases programadas o reservas semestrales. */
 async function resolverContextoDocente({ persona, documento, clasesDocente, reservasDocente = [], registrosHoy }) {
-  const prestamoActivo = await llaveRepository.findPendienteByDocumento(documento);
-  if (prestamoActivo) {
-    return { rol: 'docente', docente: persona, prestamoActivo, clasesDisponibles: [] };
+  const prestamosActivos = await llaveRepository.findPendientesByDocumento(documento);
+  if (prestamosActivos.length === 1) {
+    return { rol: 'docente', docente: persona, prestamoActivo: prestamosActivos[0], prestamosActivos, clasesDisponibles: [] };
+  }
+  if (prestamosActivos.length > 1) {
+    return { rol: 'docente', docente: persona, prestamoActivo: null, prestamosActivos, clasesDisponibles: [] };
   }
 
   const horariosProcesados = (registrosHoy || [])
