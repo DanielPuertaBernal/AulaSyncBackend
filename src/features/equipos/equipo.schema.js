@@ -10,7 +10,7 @@ const equipoSchema = new mongoose.Schema(
     nombre: { type: String, required: true, trim: true },
     marca: { type: String, default: '', trim: true },
     consecutivo: { type: Number, required: true },
-    codigo_inventario: { type: String, required: true, unique: true, trim: true },
+    codigo_inventario: { type: String, required: false, default: null, unique: true, sparse: true, trim: true },
     codigo_barras: { type: String, default: '', trim: true },
     descripcion: { type: String, default: '' },
     estado: {

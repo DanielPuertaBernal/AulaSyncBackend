@@ -35,19 +35,21 @@ class EquipoService {
    * Genera código de barras automático: INV-{codigo}-{consecutivo:03d}
    */
   async registrar({ nombre, marca, consecutivo, codigo_inventario, descripcion }) {
-    const existing = await equipoRepository.findByCodigo(codigo_inventario);
-    if (existing) {
-      throw ApiError.conflict(`Ya existe un equipo con código '${codigo_inventario}'`);
+    if (codigo_inventario) {
+      const existing = await equipoRepository.findByCodigo(codigo_inventario);
+      if (existing) {
+        throw ApiError.conflict(`Ya existe un equipo con código '${codigo_inventario}'`);
+      }
     }
     const cons = parseInt(consecutivo, 10);
-    const codigoBase = String(codigo_inventario).split('-')[0] || codigo_inventario;
-    const codigo_barras = `INV-${codigoBase}-${String(cons).padStart(3, '0')}`;
+    const codigoBase = codigo_inventario ? String(codigo_inventario).split('-')[0] : '';
+    const codigo_barras = codigoBase ? `INV-${codigoBase}-${String(cons).padStart(3, '0')}` : '';
 
     return equipoRepository.create({
       nombre: normalizeString(nombre),
       marca: normalizeString(marca),
       consecutivo: cons,
-      codigo_inventario: normalizeString(codigo_inventario),
+      codigo_inventario: codigo_inventario ? normalizeString(codigo_inventario) : null,
       codigo_barras,
       descripcion: normalizeString(descripcion),
     });

@@ -11,7 +11,7 @@ const crearSchema = z.object({
   nombre: z.string().min(1),
   marca: z.string().optional().default(''),
   consecutivo: z.union([z.string(), z.number()]),
-  codigo_inventario: z.string().min(1),
+  codigo_inventario: z.string().optional().transform((v) => (v && v.trim() ? v.trim() : undefined)),
   descripcion: z.string().optional().default(''),
 });
 
