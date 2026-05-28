@@ -6,6 +6,7 @@
 const usuarioRepository = require('./usuario.repository');
 const authRepository = require('../auth/auth.repository');
 const authService = require('../auth/auth.service');
+const comunidadRepository = require('../comunidad/comunidad.repository');
 const ApiError = require('../../shared/errors/api.error');
 const { ROLES } = require('./usuario.schema');
 const { createLogger } = require('../../shared/utils/logger');
@@ -19,7 +20,17 @@ class UsuarioService {
    * @returns {Promise<object[]>}
    */
   async listarUsuarios() {
-    return usuarioRepository.findAll();
+    const usuarios = await usuarioRepository.findAll();
+    // Enriquecer con datos de comunidad si tienen numero_documento vinculado
+    const documentos = usuarios.map((u) => u.numero_documento).filter(Boolean);
+    const personas = documentos.length
+      ? await comunidadRepository.findManyByDocumentos(documentos)
+      : [];
+    const personaMap = new Map(personas.map((p) => [p.numero_documento, p]));
+    return usuarios.map((u) => ({
+      ...u,
+      comunidad: u.numero_documento ? (personaMap.get(u.numero_documento) || null) : null,
+    }));
   }
 
   /**
@@ -34,7 +45,7 @@ class UsuarioService {
    * @param {string} [data.rol] - Default: AUX_PROG
    * @returns {Promise<object>}
    */
-  async crearUsuario({ usuario, nombre, email, contacto, password, rol }) {
+  async crearUsuario({ usuario, nombre, email, contacto, password, rol, numero_documento }) {
     // Verificar duplicados
     const { usuarioExiste, emailExiste } = await usuarioRepository.checkDuplicates(usuario, email);
     if (usuarioExiste) {
@@ -54,6 +65,7 @@ class UsuarioService {
       rol: rol || ROLES.AUX,
       hash_password: hashPassword,
       activo: true,
+      numero_documento: numero_documento || '',
     });
   }
 
@@ -140,6 +152,25 @@ class UsuarioService {
       throw ApiError.notFound(`Usuario '${username}' no encontrado`);
     }
     return user;
+  }
+
+  /**
+   * Vincula o desvincula un usuario de la app con un registro de Comunidad.
+   * Pasar numero_documento vacío ('') para desvincular.
+   */
+  async vincularComunidad(username, numero_documento) {
+    const doc = String(numero_documento || '').trim();
+    if (doc) {
+      const persona = await comunidadRepository.findByDocumento(doc);
+      if (!persona) {
+        throw ApiError.notFound(`No se encontró ninguna persona en Comunidad con documento '${doc}'`);
+      }
+    }
+    const updated = await usuarioRepository.updateByUsername(username, { numero_documento: doc });
+    if (!updated) {
+      throw ApiError.notFound(`Usuario '${username}' no encontrado`);
+    }
+    return updated;
   }
 }
 

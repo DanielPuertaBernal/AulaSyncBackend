@@ -17,6 +17,7 @@ const crearUsuarioSchema = z.object({
   contacto: z.string().optional().default(''),
   password: z.string().min(6),
   rol: z.enum([ROLES.ADMIN, ROLES.AUX]).optional(),
+  numero_documento: z.string().optional().default(''),
 });
 
 const estadoSchema = z.object({
@@ -175,5 +176,11 @@ router.patch('/perfil', ...requireAuth, validate(perfilSchema), (req, res) => us
  *         description: Contraseña actual incorrecta
  */
 router.patch('/contrasena', ...requireAuth, validate(contrasenaSchema), (req, res) => usuarioController.cambiarContrasena(req, res));
+
+const vinculacionSchema = z.object({
+  numero_documento: z.string().trim(),
+});
+
+router.patch('/:username/vinculacion', ...requireAdmin, validate(vinculacionSchema), (req, res) => usuarioController.vincularComunidad(req, res));
 
 module.exports = router;

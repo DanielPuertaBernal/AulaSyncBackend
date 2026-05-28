@@ -37,6 +37,15 @@ class UsuarioController {
     await usuarioService.cambiarContrasena(req.user.usuario, passwordActual, passwordNueva);
     return res.json({ ok: true, message: 'Contraseña actualizada exitosamente' });
   }
+
+  /** PATCH /api/usuarios/:username/vinculacion */
+  async vincularComunidad(req, res) {
+    const { username } = req.params;
+    const { numero_documento } = req.body;
+    const updated = await usuarioService.vincularComunidad(username, numero_documento);
+    const accion = numero_documento ? 'vinculado a Comunidad' : 'desvinculado de Comunidad';
+    return res.json({ ok: true, message: `Usuario ${accion}`, data: { usuario: updated } });
+  }
 }
 
 module.exports = new UsuarioController();

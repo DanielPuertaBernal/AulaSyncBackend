@@ -67,6 +67,11 @@ const usuarioSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    numero_documento: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     sesiones: {
       type: [sesionSchema],
       default: [],
