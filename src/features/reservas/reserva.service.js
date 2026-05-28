@@ -1,5 +1,6 @@
 'use strict';
 const reservaRepository = require('./reserva.repository');
+const comunidadRepository = require('../comunidad/comunidad.repository');
 const { Programacion } = require('../programacion/programacion.schema');
 const semestreRepository = require('../programacion/programacion.semestre.repository');
 const { Llave } = require('../llaves/llave.schema');
@@ -182,7 +183,25 @@ class ReservaService {
 
   async listar(filters, pagination) {
     await this.sincronizarEstadosVencidos();
-    return reservaRepository.findHistorial(filters, pagination);
+    const resultado = await reservaRepository.findHistorial(filters, pagination);
+
+    // Enriquecer con correo de comunidad cuando se listan reservas no reclamadas
+    if (filters?.estado === 'no_reclamada') {
+      const reservas = Array.isArray(resultado) ? resultado : (resultado?.reservas ?? resultado?.data ?? []);
+      const documentos = [...new Set(reservas.map((r) => r.solicitante_documento).filter(Boolean))];
+      if (documentos.length) {
+        const personas = await comunidadRepository.findManyByDocumentos(documentos);
+        const correoMap = new Map(personas.map((p) => [p.numero_documento, p.correo]));
+        const enriquecidas = reservas.map((r) => ({
+          ...r,
+          solicitante_correo: correoMap.get(r.solicitante_documento) || '',
+        }));
+        if (Array.isArray(resultado)) return enriquecidas;
+        return { ...resultado, reservas: enriquecidas, data: enriquecidas };
+      }
+    }
+
+    return resultado;
   }
 
   async aprobar(id, aprobadoPor) {
