@@ -67,6 +67,24 @@ class ReservasSemestralesRepository {
     return Programacion.findOne({ grupo_id, tipo: 'semestral' }).lean();
   }
 
+  /**
+   * Encuentra una reserva semestral por su _id de MongoDB.
+   * @param {string} id
+   * @returns {Promise<object|null>}
+   */
+  async findById(id) {
+    return Programacion.findOne({ _id: id, tipo: 'semestral' }).lean();
+  }
+
+  /**
+   * Elimina una reserva semestral por su _id de MongoDB.
+   * @param {string} id
+   * @returns {Promise<object>}
+   */
+  async deleteById(id) {
+    return Programacion.deleteOne({ _id: id, tipo: 'semestral' });
+  }
+
   /** @param {string} semestre @returns {Promise<object>} */
   async deleteBySemestre(semestre) {
     return Programacion.deleteMany({ semestre, tipo: 'semestral' });

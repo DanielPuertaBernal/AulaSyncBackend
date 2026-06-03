@@ -90,4 +90,20 @@ router.delete(
   (req, res) => reservasSemestralesController.cancelarGrupo(req, res)
 );
 
+// ── Eliminar una reserva semestral individual (o su grupo si tiene grupo_id) ──
+
+router.delete(
+  '/reservas-semestrales/:id',
+  ...requireAdmin,
+  (req, res) => reservasSemestralesController.eliminarIndividual(req, res)
+);
+
+// ── Actualizar (reemplazar franjas de) una reserva semestral ──────────────────
+
+router.put(
+  '/reservas-semestrales/:id',
+  ...requireAdmin,
+  (req, res) => reservasSemestralesController.actualizar(req, res)
+);
+
 module.exports = router;
