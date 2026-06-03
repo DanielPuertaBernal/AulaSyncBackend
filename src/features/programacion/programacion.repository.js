@@ -35,6 +35,14 @@ class ProgramacionRepository {
     return Programacion.deleteMany({ semestre });
   }
 
+  /** Propaga nuevas fechas de semestre a todos los registros de programación y semestrales del semestre dado. */
+  async updateFechasPorSemestre(semestre, fecha_inicio_semestre, fecha_fin_semestre) {
+    return Programacion.updateMany(
+      { semestre },
+      { $set: { fecha_inicio_semestre, fecha_fin_semestre } }
+    );
+  }
+
   /** @param {object[]} registros @param {string} semestre - Código normalizado del semestre a reemplazar @returns {Promise<{insertados: number}>} Reemplaza solo los registros de tipo 'programacion' del semestre indicado (no toca semestrales) */
   async bulkInsert(registros, semestre) {
     const session = await mongoose.startSession();

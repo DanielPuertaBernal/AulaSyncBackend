@@ -3,7 +3,7 @@ const programacionRepository = require('./programacion.repository');
 const semestreRepository = require('./programacion.semestre.repository');
 const reservasSemestralesRepository = require('../reservas_semestrales/reservas_semestrales.repository');
 const ApiError = require('../../shared/errors/api.error');
-const { parseExcel, cleanText, cleanDocumento, generateExcel } = require('../../shared/utils/excel.parser');
+const { parseExcel, cleanText, cleanDocumento, generateExcel, generateExcelMultiSheet } = require('../../shared/utils/excel.parser');
 const { getDiaActual, horaAMinutos } = require('../../shared/utils/date.helper');
 const { normalizeDocumento, normalizeString, normalizeUpperString } = require('../../shared/utils/normalize.helper');
 const { createLogger } = require('../../shared/utils/logger');
@@ -36,14 +36,27 @@ function normalizarCodigoSemestre(raw) {
  */
 function parseFechaExcel(str) {
   if (!str) return null;
-  const datepart = String(str).trim().split(' ')[0];
+  // Si XLSX entregó un Date object directamente
+  if (str instanceof Date) return Number.isNaN(str.getTime()) ? null : str;
+  const datepart = String(str).trim().split(' ')[0]; // descarta parte de hora
   const parts = datepart.split('/');
   if (parts.length !== 3) return null;
-  const day = parseInt(parts[0], 10);
-  const month = parseInt(parts[1], 10);
-  const year = parseInt(parts[2], 10);
-  if (Number.isNaN(day) || Number.isNaN(month) || Number.isNaN(year)) return null;
-  return new Date(Date.UTC(year, month - 1, day));
+  let a = parseInt(parts[0], 10);
+  let b = parseInt(parts[1], 10);
+  let c = parseInt(parts[2], 10);
+  if (Number.isNaN(a) || Number.isNaN(b) || Number.isNaN(c)) return null;
+  // XLSX con raw:false devuelve años de 2 dígitos (ej: 26 → 2026)
+  if (c < 100) c += 2000;
+  // Detectar orden día/mes:
+  //   a > 12 → a es día, b es mes  (DD/MM/YYYY o D/M/YY)
+  //   b > 12 → b es día, a es mes  (MM/DD/YYYY o M/D/YY  ← formato XLSX)
+  //   ambos ≤ 12 → ambiguo, usar convención DD/MM local
+  let day, month;
+  if (a > 12)      { day = a; month = b; }
+  else if (b > 12) { day = b; month = a; }
+  else             { day = a; month = b; }
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return new Date(Date.UTC(c, month - 1, day));
 }
 
 class ProgramacionService {
@@ -82,7 +95,8 @@ class ProgramacionService {
       throw ApiError.badRequest('La fecha de inicio debe ser anterior a la fecha de fin');
     }
     const actualizado = await semestreRepository.updateFechas(codigo, inicio, fin);
-    logger.info('Fechas de semestre actualizadas', { codigo, inicio, fin });
+    const { modifiedCount } = await programacionRepository.updateFechasPorSemestre(codigo, inicio, fin);
+    logger.info('Fechas de semestre actualizadas', { codigo, inicio, fin, programacionActualizada: modifiedCount });
     return actualizado;
   }
 
@@ -111,25 +125,51 @@ class ProgramacionService {
   }
 
   async exportar(semestre = null) {
-    const registros = semestre
-      ? await programacionRepository.findBySemestre(semestre)
-      : await programacionRepository.findAll();
-    const CAMPOS_EXCLUIDOS = ['_id', '__v', 'tipo', 'consecutivo', 'i_cancelada', 'fecha_cancelacion', 'motivo_cancelacion'];
-    const datos = registros.map((r) => {
+    const CAMPOS_EXCLUIDOS_PROG = ['_id', '__v', 'tipo', 'consecutivo', 'i_cancelada', 'fecha_cancelacion', 'motivo_cancelacion'];
+    const CAMPOS_EXCLUIDOS_SEM = ['_id', '__v', 'tipo'];
+
+    const [registrosProg, registrosSem] = await Promise.all([
+      semestre ? programacionRepository.findBySemestre(semestre) : programacionRepository.findAll(),
+      semestre ? reservasSemestralesRepository.findBySemestre(semestre) : reservasSemestralesRepository.findAll(),
+    ]);
+
+    const datosProg = registrosProg.map((r) => {
       const obj = r.toObject ? r.toObject() : { ...r };
-      CAMPOS_EXCLUIDOS.forEach((c) => delete obj[c]);
+      CAMPOS_EXCLUIDOS_PROG.forEach((c) => delete obj[c]);
       return obj;
     });
-    return generateExcel(datos, 'Programacion');
+
+    const datosSem = registrosSem.map((r) => {
+      const obj = r.toObject ? r.toObject() : { ...r };
+      CAMPOS_EXCLUIDOS_SEM.forEach((c) => delete obj[c]);
+      return obj;
+    });
+
+    return generateExcelMultiSheet([
+      { name: 'Programacion', data: datosProg },
+      { name: 'Semestrales', data: datosSem },
+    ]);
   }
 
   async importarDesdeExcel(buffer, cargadoPor = '') {
     const rows = parseExcel(buffer);
     if (!rows.length) throw ApiError.badRequest('El archivo Excel está vacío');
 
-    const limpios = this._limpiarProgramacion(rows);
+    const { validos: limpios, rechazados } = this._limpiarProgramacion(rows);
     if (!limpios.length) {
-      throw ApiError.badRequest('No se encontraron registros válidos en el archivo');
+      const porMotivo = {};
+      for (const r of rechazados) porMotivo[r.motivo] = (porMotivo[r.motivo] || 0) + 1;
+      const detalles = Object.entries(porMotivo)
+        .map(([motivo, n]) => `${n} fila(s) ${motivo}`)
+        .join('; ');
+      const colsDetectadas = rows.length
+        ? Object.keys(rows[0]).slice(0, 10).join(', ')
+        : 'ninguna';
+      throw ApiError.badRequest(
+        `No se encontraron registros válidos en el archivo (${rows.length} filas revisadas). ` +
+        `${detalles || 'No se reconocieron las columnas'}. ` +
+        `Columnas detectadas: [${colsDetectadas}].`
+      );
     }
 
     // Extraer y validar semestre único del archivo
@@ -178,14 +218,32 @@ class ProgramacionService {
 
     // Upsert metadatos del semestre
     try {
-      const meta = normalizarCodigoSemestre(
-        limpios.find((r) => r._semestre_raw)?._semestre_raw || semestreCodigo
-      );
+      let codigoRaw = semestreCodigo;
+      let anio = 0;
+      let periodo = 0;
+
+      const rawCode = limpios.find((r) => r._semestre_raw)?._semestre_raw;
+      if (rawCode) {
+        try {
+          const meta = normalizarCodigoSemestre(rawCode);
+          codigoRaw = meta.codigo_raw;
+          anio = meta.anio;
+          periodo = meta.periodo;
+        } catch { /* mantener defaults */ }
+      } else {
+        // Código ya normalizado: "YYYY-P" (ej: "2026-2")
+        const parts = semestreCodigo.split('-');
+        if (parts.length === 2) {
+          anio = parseInt(parts[0], 10) || 0;
+          periodo = parseInt(parts[1], 10) || 0;
+        }
+      }
+
       await semestreRepository.upsert({
-        codigo_raw: meta.codigo_raw,
+        codigo_raw: codigoRaw,
         codigo: semestreCodigo,
-        anio: meta.anio,
-        periodo: meta.periodo,
+        anio,
+        periodo,
         fecha_inicio: fechaInicio,
         fecha_fin: fechaFin,
         fecha_carga: new Date(),
@@ -212,94 +270,116 @@ class ProgramacionService {
   _limpiarProgramacion(rows) {
     const MAPEO = {
       'nroidenti': 'numero_documento',
+      'numero_documento': 'numero_documento',
       'Número de Documento': 'numero_documento',
       'profesor': 'docente',
+      'docente': 'docente',
       'Docente': 'docente',
       'dia': 'dia',
       'Día': 'dia',
       'horario': 'horario',
       'Horario': 'horario',
       'hora_ini': 'hora_inicio',
+      'hora_inicio': 'hora_inicio',
       'Hora Inicio': 'hora_inicio',
       'hora_fin': 'hora_fin',
       'Hora Fin': 'hora_fin',
       'aula': 'aula',
       'Aula': 'aula',
       'descripcion': 'facultad',
+      'facultad': 'facultad',
       'Facultad': 'facultad',
       'descripcion_1': 'materia',
-      'Materia de la Clase': 'materia',
-      'Código de la Materia': 'codigo_materia',
       'materia': 'codigo_materia',
+      'Materia de la Clase': 'materia',
+      'codigo_materia': 'codigo_materia',
+      'Código de la Materia': 'codigo_materia',
       'grupo': 'grupo',
       'Grupo': 'grupo',
       'nivel_grupo': 'nivel_grupo',
       'Nivel del Grupo': 'nivel_grupo',
       'nro_estudiantes_premat': 'estudiantes_prematriculados',
+      'estudiantes_prematriculados': 'estudiantes_prematriculados',
       'nro_estudiantes': 'estudiantes_matriculados',
+      'estudiantes_matriculados': 'estudiantes_matriculados',
       'total_estudiantes': 'total_estudiantes',
       'semestre': 'semestre',
       'Semestre': 'semestre',
     };
 
-    return rows
-      .map((row) => {
-        const mapped = {};
-        for (const [src, dest] of Object.entries(MAPEO)) {
-          if (row[src] !== undefined && row[src] !== null) {
-            mapped[dest] = row[src];
-          }
+    const validos = [];
+    const rechazados = [];
+
+    for (const row of rows) {
+      const mapped = {};
+      for (const [src, dest] of Object.entries(MAPEO)) {
+        if (row[src] !== undefined && row[src] !== null) {
+          mapped[dest] = row[src];
         }
+      }
 
-        const documento = cleanDocumento(mapped.numero_documento || '');
-        if (!documento) return null;
-        mapped.numero_documento = documento;
+      const documento = cleanDocumento(mapped.numero_documento || '');
+      if (!documento) {
+        rechazados.push({ motivo: `sin número de documento válido (valor: "${mapped.numero_documento ?? ''}")` });
+        continue;
+      }
+      mapped.numero_documento = documento;
 
-        ['docente', 'dia', 'aula', 'facultad', 'materia', 'horario'].forEach((k) => {
-          if (mapped[k]) mapped[k] = cleanText(mapped[k]);
-        });
+      ['docente', 'dia', 'aula', 'facultad', 'materia', 'horario'].forEach((k) => {
+        if (mapped[k]) mapped[k] = cleanText(mapped[k]);
+      });
 
-        // Normalizar nombre de aula: quitar guiones (ej: "M-303" → "M303", "CO-303" → "CO303")
-        if (mapped.aula) mapped.aula = mapped.aula.replace(/-/g, '');
+      // Normalizar nombre de aula: quitar guiones (ej: "M-303" → "M303", "CO-303" → "CO303")
+      if (mapped.aula) mapped.aula = mapped.aula.replace(/-/g, '');
 
-        if (!mapped.horario && mapped.hora_inicio && mapped.hora_fin) {
-          mapped.horario = `${mapped.hora_inicio} A ${mapped.hora_fin}`;
+      if (!mapped.horario && mapped.hora_inicio && mapped.hora_fin) {
+        mapped.horario = `${mapped.hora_inicio} A ${mapped.hora_fin}`;
+      }
+
+      if (mapped.horario && (!mapped.hora_inicio || !mapped.hora_fin)) {
+        const [ini, fin] = String(mapped.horario).toUpperCase().split(' A ');
+        if (ini) mapped.hora_inicio = ini.trim();
+        if (fin) mapped.hora_fin = fin.trim();
+      }
+
+      mapped.hora_inicio = this._normalizarMinutos(mapped.hora_inicio);
+      mapped.hora_fin = this._normalizarMinutos(mapped.hora_fin);
+
+      mapped.estudiantes_prematriculados = parseInt(mapped.estudiantes_prematriculados, 10) || 0;
+      mapped.estudiantes_matriculados = parseInt(mapped.estudiantes_matriculados, 10) || 0;
+      mapped.total_estudiantes =
+        (mapped.estudiantes_prematriculados + mapped.estudiantes_matriculados) || 0;
+
+      // Normalizar el código de semestre y guardar raw para upsert de metadatos
+      if (mapped.semestre) {
+        try {
+          const meta = normalizarCodigoSemestre(mapped.semestre);
+          mapped._semestre_raw = meta.codigo_raw;
+          mapped.semestre = meta.codigo;
+        } catch {
+          // si no normaliza, mantener valor original
         }
+      }
 
-        if (mapped.horario && (!mapped.hora_inicio || !mapped.hora_fin)) {
-          const [ini, fin] = String(mapped.horario).toUpperCase().split(' A ');
-          if (ini) mapped.hora_inicio = ini.trim();
-          if (fin) mapped.hora_fin = fin.trim();
-        }
+      // Guardar fechas raw para extraerlas una sola vez en importar
+      mapped._fecha_inicio_raw = row['fecha_inicio'] || row['Fecha Inicio'] || row['fecha_inicio_semestre'] || null;
+      mapped._fecha_fin_raw = row['fecha_fin'] || row['Fecha Fin'] || row['fecha_fin_semestre'] || null;
+      mapped.tipo = 'programacion';
 
-        mapped.hora_inicio = this._normalizarMinutos(mapped.hora_inicio);
-        mapped.hora_fin = this._normalizarMinutos(mapped.hora_fin);
+      const faltantes = [];
+      if (!mapped.numero_documento) faltantes.push('número de documento');
+      if (!mapped.docente) faltantes.push('docente');
+      if (!mapped.dia) faltantes.push('día');
+      if (!mapped.aula) faltantes.push('aula');
 
-        mapped.estudiantes_prematriculados = parseInt(mapped.estudiantes_prematriculados, 10) || 0;
-        mapped.estudiantes_matriculados = parseInt(mapped.estudiantes_matriculados, 10) || 0;
-        mapped.total_estudiantes =
-          (mapped.estudiantes_prematriculados + mapped.estudiantes_matriculados) || 0;
+      if (faltantes.length) {
+        rechazados.push({ motivo: `con campo(s) requerido(s) vacíos: ${faltantes.join(', ')}` });
+      } else {
+        validos.push(mapped);
+      }
+    }
 
-        // Normalizar el código de semestre y guardar raw para upsert de metadatos
-        if (mapped.semestre) {
-          try {
-            const meta = normalizarCodigoSemestre(mapped.semestre);
-            mapped._semestre_raw = meta.codigo_raw;
-            mapped.semestre = meta.codigo;
-          } catch {
-            // si no normaliza, mantener valor original
-          }
-        }
-
-        // Guardar fechas raw para extraerlas una sola vez en importar
-        mapped._fecha_inicio_raw = row['fecha_inicio'] || row['Fecha Inicio'] || null;
-        mapped._fecha_fin_raw = row['fecha_fin'] || row['Fecha Fin'] || null;
-        mapped.tipo = 'programacion';
-
-        return mapped;
-      })
-      .filter(Boolean)
-      .filter((r) => this._esRegistroValido(r));
+    return { validos, rechazados };
   }
 
   /** Redondea minutos 1-9 a :00 (ej: 7:05 → 7:00). */
