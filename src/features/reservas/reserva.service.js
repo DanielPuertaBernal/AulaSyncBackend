@@ -2,7 +2,6 @@
 const reservaRepository = require('./reserva.repository');
 const comunidadRepository = require('../comunidad/comunidad.repository');
 const { Programacion } = require('../programacion/programacion.schema');
-const semestreRepository = require('../programacion/programacion.semestre.repository');
 const { Llave } = require('../llaves/llave.schema');
 const { Reserva } = require('./reserva.schema');
 const {
@@ -41,15 +40,18 @@ class ReservaService {
       conflictos.push({ tipo: 'reserva', detalle: `${c.solicitante_nombre || 'Reserva'} (${c.hora_inicio}-${c.hora_fin})`, data: c })
     );
 
-    // Conflictos con programación académica
+    // Conflictos con programación académica y semestrales
     const fechaObj = new Date(`${datos.fecha}T12:00:00`);
     const diaRegex = DIA_REGEX[fechaObj.getDay()];
 
     if (diaRegex) {
+      // Solo muestra clases cuyo semestre cubre la fecha de la reserva
       const progSalon = await Programacion.find({
         aula: datos.nombre_salon,
         dia: diaRegex,
         tipo: 'programacion',
+        fecha_inicio_semestre: { $lte: fechaObj },
+        fecha_fin_semestre: { $gte: fechaObj },
       }).lean();
 
       for (const p of progSalon) {
@@ -64,24 +66,22 @@ class ReservaService {
         }
       }
 
-      // Conflictos con reservas semestrales activas del semestre vigente
-      const semestreVigente = await semestreRepository.findVigente();
-      if (semestreVigente) {
-        const semestrales = await Programacion.find({
-          tipo: 'semestral',
-          aula: datos.nombre_salon,
-          dia: diaRegex,
-          semestre: semestreVigente.codigo,
-          i_cancelada: { $ne: 1 },
-        }).lean();
-        for (const s of semestrales) {
-          if (s.hora_inicio && s.hora_fin && toMin(s.hora_inicio) < toMin(datos.hora_fin) && toMin(s.hora_fin) > toMin(datos.hora_inicio)) {
-            conflictos.push({
-              tipo: 'semestral',
-              detalle: `${s.docente || 'Docente'} — ${s.materia || ''} (${s.hora_inicio}-${s.hora_fin})`,
-              data: s,
-            });
-          }
+      // Conflictos con reservas semestrales cuyo rango de vigencia cubre la fecha
+      const semestrales = await Programacion.find({
+        tipo: 'semestral',
+        aula: datos.nombre_salon,
+        dia: diaRegex,
+        fecha_inicio_semestre: { $lte: fechaObj },
+        fecha_fin_semestre: { $gte: fechaObj },
+        i_cancelada: { $ne: 1 },
+      }).lean();
+      for (const s of semestrales) {
+        if (s.hora_inicio && s.hora_fin && toMin(s.hora_inicio) < toMin(datos.hora_fin) && toMin(s.hora_fin) > toMin(datos.hora_inicio)) {
+          conflictos.push({
+            tipo: 'semestral',
+            detalle: `${s.docente || 'Docente'} — ${s.materia || ''} (${s.hora_inicio}-${s.hora_fin})`,
+            data: s,
+          });
         }
       }
     }
@@ -295,15 +295,17 @@ class ReservaService {
       const diaRegexEdit = DIA_REGEX[fechaObjEdit.getDay()];
       if (diaRegexEdit) {
         const [progAcademicaEdit, progSemestralEdit] = await Promise.all([
-          Programacion.find({ aula: nuevoSalon, dia: diaRegexEdit, tipo: 'programacion' }).lean(),
-          (async () => {
-            const sem = await semestreRepository.findVigente();
-            if (!sem) return [];
-            return Programacion.find({
-              tipo: 'semestral', aula: nuevoSalon, dia: diaRegexEdit,
-              semestre: sem.codigo, i_cancelada: { $ne: 1 },
-            }).lean();
-          })(),
+          Programacion.find({
+            aula: nuevoSalon, dia: diaRegexEdit, tipo: 'programacion',
+            fecha_inicio_semestre: { $lte: fechaObjEdit },
+            fecha_fin_semestre: { $gte: fechaObjEdit },
+          }).lean(),
+          Programacion.find({
+            tipo: 'semestral', aula: nuevoSalon, dia: diaRegexEdit,
+            fecha_inicio_semestre: { $lte: fechaObjEdit },
+            fecha_fin_semestre: { $gte: fechaObjEdit },
+            i_cancelada: { $ne: 1 },
+          }).lean(),
         ]);
         const cruceClase = [...progAcademicaEdit, ...progSemestralEdit].find(
           (p) => p.hora_inicio && p.hora_fin
@@ -349,18 +351,17 @@ class ReservaService {
           aula: nombre_salon,
           dia: diaRegex,
           tipo: 'programacion',
+          fecha_inicio_semestre: { $lte: fechaObj },
+          fecha_fin_semestre: { $gte: fechaObj },
         }).lean(),
-        (async () => {
-          const semestreVigente = await semestreRepository.findVigente();
-          if (!semestreVigente) return [];
-          return Programacion.find({
-            tipo: 'semestral',
-            aula: nombre_salon,
-            dia: diaRegex,
-            semestre: semestreVigente.codigo,
-            i_cancelada: { $ne: 1 },
-          }).lean();
-        })(),
+        Programacion.find({
+          tipo: 'semestral',
+          aula: nombre_salon,
+          dia: diaRegex,
+          fecha_inicio_semestre: { $lte: fechaObj },
+          fecha_fin_semestre: { $gte: fechaObj },
+          i_cancelada: { $ne: 1 },
+        }).lean(),
       ]);
     }
 
@@ -427,10 +428,13 @@ class ReservaService {
 
     let progAcademica = [];
     if (diaRegex) {
+      const fechaObjSmart = new Date(`${fecha}T12:00:00`);
       progAcademica = await Programacion.find({
         aula: nombre_salon,
         dia: diaRegex,
         tipo: 'programacion',
+        fecha_inicio_semestre: { $lte: fechaObjSmart },
+        fecha_fin_semestre: { $gte: fechaObjSmart },
       }).lean();
     }
 
@@ -487,19 +491,21 @@ class ReservaService {
       { $gt: [campoToMin('hora_fin'), horaInicioMin] },
     ];
 
-    const semestreVigente = await semestreRepository.findVigente();
+    const fechaObjDisp = new Date(`${fecha}T12:00:00`);
 
     const [ocupadosProg, ocupadosSem, ocupadosRes] = await Promise.all([
       diaRegex ? Programacion.distinct('aula', {
         tipo: 'programacion',
         dia: diaRegex,
-        ...(semestreVigente ? { semestre: semestreVigente.codigo } : {}),
+        fecha_inicio_semestre: { $lte: fechaObjDisp },
+        fecha_fin_semestre: { $gte: fechaObjDisp },
         $expr: { $and: overlapExpr },
       }) : Promise.resolve([]),
-      diaRegex && semestreVigente ? Programacion.distinct('aula', {
+      diaRegex ? Programacion.distinct('aula', {
         tipo: 'semestral',
         dia: diaRegex,
-        semestre: semestreVigente.codigo,
+        fecha_inicio_semestre: { $lte: fechaObjDisp },
+        fecha_fin_semestre: { $gte: fechaObjDisp },
         i_cancelada: { $ne: 1 },
         $expr: { $and: overlapExpr },
       }) : Promise.resolve([]),
