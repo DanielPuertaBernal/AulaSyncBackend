@@ -25,6 +25,10 @@ class ProgramacionRepository {
     return Programacion.find({ numero_documento: documento }).lean();
   }
 
+  async distinctAulas() {
+    return Programacion.distinct('aula', { aula: { $nin: ['', null] } });
+  }
+
   /** @param {string} semestre - Código normalizado (ej: "2026-1") @returns {Promise<object[]>} */
   async findBySemestre(semestre) {
     return Programacion.find({ semestre, tipo: 'programacion' }).lean();
@@ -41,6 +45,11 @@ class ProgramacionRepository {
       { semestre },
       { $set: { fecha_inicio_semestre, fecha_fin_semestre } }
     );
+  }
+
+  /** @param {string} id @param {object} update */
+  async updateById(id, update) {
+    return Programacion.findByIdAndUpdate(id, update, { new: true }).lean();
   }
 
   /** @param {object[]} registros @param {string} semestre - Código normalizado del semestre a reemplazar @returns {Promise<{insertados: number}>} Reemplaza solo los registros de tipo 'programacion' del semestre indicado (no toca semestrales) */

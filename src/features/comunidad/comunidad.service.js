@@ -31,7 +31,7 @@ class ComunidadService {
   }
 
   async crearPersona(datos) {
-    const { numero_documento, nombre, tipo, facultad, correo, id_carnet } = datos;
+    const { numero_documento, nombre, tipo, facultad, correo, id_carnet, numero_contacto } = datos;
     if (!numero_documento?.trim() || !nombre?.trim() || !tipo) {
       throw ApiError.badRequest('numero_documento, nombre y tipo son requeridos');
     }
@@ -48,6 +48,7 @@ class ComunidadService {
       facultad: String(facultad || '').trim(),
       correo: String(correo || '').trim().toLowerCase(),
       id_carnet: String(id_carnet || '').trim(),
+      numero_contacto: String(numero_contacto || '').trim(),
     });
     logger.info('Persona creada manualmente', { documento: nueva.numero_documento, tipo: nueva.tipo });
     return nueva;
@@ -81,7 +82,7 @@ class ComunidadService {
     const persona = await comunidadRepository.findById(id);
     if (!persona) throw ApiError.notFound('Persona no encontrada');
 
-    const CAMPOS_PERMITIDOS = ['nombre', 'tipo', 'facultad', 'correo', 'id_carnet'];
+    const CAMPOS_PERMITIDOS = ['nombre', 'tipo', 'facultad', 'correo', 'id_carnet', 'numero_contacto'];
     const actualizado = {};
     for (const campo of CAMPOS_PERMITIDOS) {
       if (data[campo] !== undefined) actualizado[campo] = String(data[campo]).trim();

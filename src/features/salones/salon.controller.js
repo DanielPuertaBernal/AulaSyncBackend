@@ -20,6 +20,12 @@ class SalonController {
     return res.json({ ok: true, message: 'Salón actualizado correctamente', data: { salon } });
   }
 
+  /** GET /api/salones/aulas-sin-registrar */
+  async aulasDeProgSinRegistrar(req, res) {
+    const aulas = await salonService.aulasDeProgSinRegistrar();
+    return res.json({ ok: true, data: { aulas } });
+  }
+
   /** DELETE /api/salones/:id */
   async eliminar(req, res) {
     await salonService.eliminar(req.params.id);

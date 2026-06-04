@@ -58,11 +58,11 @@ class ReservasSemestralesController {
 
   /** POST /programacion/reservas-semestrales/validar */
   async validar(req, res) {
-    const { nombre_salon, dia, hora_inicio, hora_fin, excluir_grupo_id, semestre, fecha_inicio_vigencia, fecha_fin_vigencia } = req.body;
+    const { nombre_salon, dia, hora_inicio, hora_fin, excluir_grupo_id, excluir_id, semestre, fecha_inicio_vigencia, fecha_fin_vigencia } = req.body;
     if (!nombre_salon || !dia || !hora_inicio || !hora_fin) {
       return res.status(400).json({ ok: false, message: 'Se requiere nombre_salon, dia, hora_inicio y hora_fin' });
     }
-    const result = await reservasSemestralesService.validarConflictos({ nombre_salon, dia, hora_inicio, hora_fin, excluir_grupo_id, semestre, fecha_inicio_vigencia, fecha_fin_vigencia });
+    const result = await reservasSemestralesService.validarConflictos({ nombre_salon, dia, hora_inicio, hora_fin, excluir_grupo_id, excluir_id, semestre, fecha_inicio_vigencia, fecha_fin_vigencia });
     return res.json({ ok: true, data: result });
   }
 
@@ -78,11 +78,11 @@ class ReservasSemestralesController {
 
   /** GET /programacion/reservas-semestrales/salones-disponibles?dia=X&hora_inicio=Y&hora_fin=Z&semestre=W&excluir_grupo_id=G */
   async salonesDisponibles(req, res) {
-    const { dia, hora_inicio, hora_fin, semestre, fecha_inicio_vigencia, fecha_fin_vigencia, excluir_grupo_id } = req.query;
+    const { dia, hora_inicio, hora_fin, semestre, fecha_inicio_vigencia, fecha_fin_vigencia, excluir_grupo_id, excluir_id } = req.query;
     if (!dia || !hora_inicio || !hora_fin) {
       return res.status(400).json({ ok: false, message: 'Se requiere dia, hora_inicio y hora_fin' });
     }
-    const result = await reservasSemestralesService.salonesDisponibles(dia, hora_inicio, hora_fin, semestre, excluir_grupo_id || null);
+    const result = await reservasSemestralesService.salonesDisponibles(dia, hora_inicio, hora_fin, semestre, excluir_grupo_id || null, excluir_id || null);
     return res.json({ ok: true, data: result });
   }
 

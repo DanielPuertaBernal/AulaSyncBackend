@@ -141,4 +141,6 @@ router.get('/dia/:dia', ...requireAuth, (req, res) => programacionController.lis
  */
 router.post('/importar', ...requireAdmin, upload.single('archivo'), (req, res) => programacionController.importar(req, res));
 
+router.patch('/:id', ...requireAdmin, (req, res) => programacionController.actualizarClase(req, res));
+
 module.exports = router;

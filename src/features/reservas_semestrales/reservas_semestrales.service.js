@@ -282,7 +282,7 @@ class ReservasSemestralesService {
   /**
    * Valida si una franja horaria tiene conflictos con programación regular o semestrales activas.
    */
-  async validarConflictos({ nombre_salon, dia, hora_inicio, hora_fin, excluir_grupo_id, semestre }) {
+  async validarConflictos({ nombre_salon, dia, hora_inicio, hora_fin, excluir_grupo_id, excluir_id, semestre }) {
     const conflictos = [];
     const toMin = (t) => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + (m || 0); };
 
@@ -299,6 +299,7 @@ class ReservasSemestralesService {
         aula: new RegExp(`^${aulaNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
         dia: regexDia,
         semestre: codigoSemestre,
+        ...(excluir_id ? { _id: { $ne: excluir_id } } : {}),
       }).lean(),
       Programacion.find({
         tipo: 'semestral',
@@ -330,7 +331,7 @@ class ReservasSemestralesService {
   /**
    * Retorna los salones sin conflicto durante dia+hora en el semestre dado (o el vigente).
    */
-  async salonesDisponibles(dia, hora_inicio, hora_fin, semestre, excluir_grupo_id = null) {
+  async salonesDisponibles(dia, hora_inicio, hora_fin, semestre, excluir_grupo_id = null, excluir_id = null) {
     let codigoSemestre;
     let filtroFechaIni;
     let filtroFechaFin;
@@ -356,7 +357,7 @@ class ReservasSemestralesService {
     const regexDia = diaRegex(dia);
 
     const [progDia, semDia] = await Promise.all([
-      Programacion.find({ tipo: 'programacion', dia: regexDia, semestre: codigoSemestre }, { aula: 1, hora_inicio: 1, hora_fin: 1 }).lean(),
+      Programacion.find({ tipo: 'programacion', dia: regexDia, semestre: codigoSemestre, ...(excluir_id ? { _id: { $ne: excluir_id } } : {}) }, { aula: 1, hora_inicio: 1, hora_fin: 1 }).lean(),
       Programacion.find({ tipo: 'semestral', dia: regexDia, semestre: codigoSemestre, i_cancelada: { $ne: 1 }, ...(excluir_grupo_id ? { grupo_id: { $ne: excluir_grupo_id } } : {}) }, { aula: 1, hora_inicio: 1, hora_fin: 1 }).lean(),
     ]);
 

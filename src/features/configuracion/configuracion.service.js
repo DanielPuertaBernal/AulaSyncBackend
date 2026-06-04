@@ -10,12 +10,22 @@ const DEFAULTS = {
   notificaciones_activas: true,
 };
 
+const DEFAULTS_SIN_BLOQUE = {
+  tiempo_maximo_prestamo_minutos: 60,
+  intervalo_recordatorio_minutos: 15,
+  max_recordatorios: 2,
+  notificaciones_activas: true,
+};
+
 class ConfiguracionService {
   async listar() {
     return configuracionRepository.findAll();
   }
 
   async obtenerPorBloque(nombreBloque) {
+    if (!nombreBloque) {
+      return { nombre_bloque: '', ...DEFAULTS_SIN_BLOQUE };
+    }
     const config = await configuracionRepository.findByBloque(nombreBloque);
     return config || { nombre_bloque: nombreBloque, ...DEFAULTS };
   }

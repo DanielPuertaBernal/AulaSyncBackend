@@ -1,6 +1,7 @@
 'use strict';
 const salonRepository = require('./salon.repository');
 const bloqueRepository = require('../bloques/bloque.repository');
+const programacionRepository = require('../programacion/programacion.repository');
 const ApiError = require('../../shared/errors/api.error');
 const {
   normalizeAula,
@@ -96,6 +97,15 @@ class SalonService {
     }
 
     return payload;
+  }
+
+  async aulasDeProgSinRegistrar() {
+    const [aulasEnProg, salones] = await Promise.all([
+      programacionRepository.distinctAulas(),
+      salonRepository.findAll(),
+    ]);
+    const registrados = new Set(salones.map((s) => s.nombre_salon));
+    return aulasEnProg.filter((a) => a && !registrados.has(a)).sort();
   }
 
   async _validarBloqueRegistrado(nombreBloque) {
