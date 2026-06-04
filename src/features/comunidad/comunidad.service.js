@@ -30,6 +30,29 @@ class ComunidadService {
     return comunidadRepository.search(query, filtro);
   }
 
+  async crearPersona(datos) {
+    const { numero_documento, nombre, tipo, facultad, correo, id_carnet } = datos;
+    if (!numero_documento?.trim() || !nombre?.trim() || !tipo) {
+      throw ApiError.badRequest('numero_documento, nombre y tipo son requeridos');
+    }
+    if (!TIPOS_COMUNIDAD.includes(tipo)) {
+      throw ApiError.badRequest(`tipo debe ser uno de: ${TIPOS_COMUNIDAD.join(', ')}`);
+    }
+    const existe = await comunidadRepository.findByDocumento(String(numero_documento).trim());
+    if (existe) throw ApiError.conflict('Ya existe una persona con ese número de documento');
+
+    const nueva = await comunidadRepository.crear({
+      numero_documento: String(numero_documento).trim(),
+      nombre: String(nombre).trim(),
+      tipo,
+      facultad: String(facultad || '').trim(),
+      correo: String(correo || '').trim().toLowerCase(),
+      id_carnet: String(id_carnet || '').trim(),
+    });
+    logger.info('Persona creada manualmente', { documento: nueva.numero_documento, tipo: nueva.tipo });
+    return nueva;
+  }
+
   async sync(payload) {
     const registros = Array.isArray(payload.registros)
       ? payload.registros

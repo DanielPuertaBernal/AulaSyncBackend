@@ -35,6 +35,16 @@ class ComunidadController {
     return res.json({ ok: true, message: 'Persona eliminada correctamente' });
   }
 
+  /** POST /api/comunidad - Crea una persona manualmente */
+  async crear(req, res) {
+    const { numero_documento, nombre, tipo, facultad, correo, id_carnet } = req.body;
+    if (!numero_documento || !nombre || !tipo) {
+      return res.status(400).json({ ok: false, message: 'numero_documento, nombre y tipo son requeridos' });
+    }
+    const persona = await comunidadService.crearPersona({ numero_documento, nombre, tipo, facultad, correo, id_carnet });
+    return res.status(201).json({ ok: true, data: { persona } });
+  }
+
   /** POST /api/comunidad/sync - Sincroniza registros desde sistema externo */
   async sync(req, res) {
     const resultado = await comunidadService.sync(req.body);
