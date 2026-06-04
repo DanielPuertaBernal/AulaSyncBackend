@@ -25,6 +25,10 @@ class ProgramacionRepository {
     return Programacion.find({ numero_documento: documento }).lean();
   }
 
+  async distinctAulas() {
+    return Programacion.distinct('aula', { aula: { $nin: ['', null] } });
+  }
+
   /** @param {string} semestre - Código normalizado (ej: "2026-1") @returns {Promise<object[]>} */
   async findBySemestre(semestre) {
     return Programacion.find({ semestre, tipo: 'programacion' }).lean();

@@ -56,6 +56,8 @@ const actualizarSchema = z.object({
  */
 router.get('/', ...requireAuth, (req, res) => salonController.listar(req, res));
 
+router.get('/aulas-sin-registrar', ...requireAuth, (req, res) => salonController.aulasDeProgSinRegistrar(req, res));
+
 /**
  * @openapi
  * /salones:
