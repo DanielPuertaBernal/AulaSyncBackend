@@ -43,6 +43,11 @@ class ProgramacionRepository {
     );
   }
 
+  /** @param {string} id @param {object} update */
+  async updateById(id, update) {
+    return Programacion.findByIdAndUpdate(id, update, { new: true }).lean();
+  }
+
   /** @param {object[]} registros @param {string} semestre - Código normalizado del semestre a reemplazar @returns {Promise<{insertados: number}>} Reemplaza solo los registros de tipo 'programacion' del semestre indicado (no toca semestrales) */
   async bulkInsert(registros, semestre) {
     const session = await mongoose.startSession();

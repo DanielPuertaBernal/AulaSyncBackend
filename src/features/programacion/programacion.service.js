@@ -401,6 +401,21 @@ class ProgramacionService {
     return hora;
   }
 
+  async actualizarClase(id, data) {
+    const CAMPOS = ['numero_documento', 'docente', 'materia', 'facultad', 'dia', 'hora_inicio', 'hora_fin', 'aula'];
+    const update = {};
+    for (const campo of CAMPOS) {
+      if (data[campo] !== undefined) update[campo] = String(data[campo]).trim();
+    }
+    if (update.hora_inicio && update.hora_fin) {
+      update.horario = `${update.hora_inicio} A ${update.hora_fin}`;
+    }
+    if (update.aula) update.aula = update.aula.replace(/-/g, '');
+    const clase = await programacionRepository.updateById(id, update);
+    if (!clase) throw ApiError.notFound('Clase no encontrada');
+    return clase;
+  }
+
   /** Valida que un registro tenga los campos mínimos requeridos. */
   _esRegistroValido(r) {
     return !!(r.numero_documento && r.docente && r.dia && r.aula);

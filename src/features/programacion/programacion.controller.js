@@ -62,6 +62,12 @@ class ProgramacionController {
     });
   }
 
+  /** PATCH /api/programacion/:id */
+  async actualizarClase(req, res) {
+    const clase = await programacionService.actualizarClase(req.params.id, req.body);
+    return res.json({ ok: true, data: { clase } });
+  }
+
   /** GET /api/programacion/exportar - Descarga Excel */
   async exportar(req, res) {
     const semestre = req.query.semestre || null;
