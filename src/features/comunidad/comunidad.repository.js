@@ -59,6 +59,11 @@ class ComunidadRepository {
     return Comunidad.findByIdAndDelete(id).lean();
   }
 
+  /** @param {object} datos @returns {Promise<object>} Persona creada */
+  async crear(datos) {
+    return Comunidad.create(datos);
+  }
+
   /** @param {object[]} registros @returns {Promise<{insertados: number, actualizados: number}>} */
   async upsertMany(registros) {
     const ops = registros.map((r) => ({
