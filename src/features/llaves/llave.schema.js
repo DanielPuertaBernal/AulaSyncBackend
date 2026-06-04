@@ -30,6 +30,7 @@ const llaveSchema = new mongoose.Schema(
     quien_entrega: { type: String, enum: ['docente', 'monitor', ''], default: '' },
     numero_documento_entrega: { type: String, default: '' },
     nombre_entrega: { type: String, default: '' },
+    numero_contacto: { type: String, default: '' },
     estado: {
       type: String,
       enum: ['en_prestamo', 'en_mora', 'demora_entrega', 'entregado'],
