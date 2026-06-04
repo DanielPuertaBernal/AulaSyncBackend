@@ -290,6 +290,7 @@ class ProgramacionService {
       'facultad': 'facultad',
       'Facultad': 'facultad',
       'descripcion_1': 'materia',
+      'descripcion2': 'materia',
       'materia': 'codigo_materia',
       'Materia de la Clase': 'materia',
       'codigo_materia': 'codigo_materia',
@@ -320,10 +321,15 @@ class ProgramacionService {
 
       const documento = cleanDocumento(mapped.numero_documento || '');
       if (!documento) {
-        rechazados.push({ motivo: `sin número de documento válido (valor: "${mapped.numero_documento ?? ''}")` });
-        continue;
+        // Si no tiene documento pero sí tiene aula, se incluye con valor por defecto
+        if (!mapped.aula) {
+          rechazados.push({ motivo: `sin número de documento válido (valor: "${mapped.numero_documento ?? ''}")` });
+          continue;
+        }
+        mapped.numero_documento = 'N/A';
+      } else {
+        mapped.numero_documento = documento;
       }
-      mapped.numero_documento = documento;
 
       ['docente', 'dia', 'aula', 'facultad', 'materia', 'horario'].forEach((k) => {
         if (mapped[k]) mapped[k] = cleanText(mapped[k]);
@@ -366,9 +372,10 @@ class ProgramacionService {
       mapped._fecha_fin_raw = row['fecha_fin'] || row['Fecha Fin'] || row['fecha_fin_semestre'] || null;
       mapped.tipo = 'programacion';
 
+      // Si tiene salón pero sin docente asignado, se incluye con valor por defecto
+      if (!mapped.docente) mapped.docente = 'No asignado';
+
       const faltantes = [];
-      if (!mapped.numero_documento) faltantes.push('número de documento');
-      if (!mapped.docente) faltantes.push('docente');
       if (!mapped.dia) faltantes.push('día');
       if (!mapped.aula) faltantes.push('aula');
 

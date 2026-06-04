@@ -11,6 +11,7 @@ const comunidadSchema = new mongoose.Schema(
     facultad: { type: String, default: '', trim: true },
     correo: { type: String, default: '', trim: true, lowercase: true },
     id_carnet: { type: String, default: '', trim: true },
+    numero_contacto: { type: String, default: '', trim: true },
   },
   {
     collection: 'comunidad',
