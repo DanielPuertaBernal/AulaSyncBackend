@@ -156,7 +156,7 @@ router.get('/:documento', ...requireAuth, (req, res) => comunidadController.obte
  *             schema:
  *               $ref: '#/components/schemas/ErrorValidacion'
  */
-router.post('/', ...requireAdmin, (req, res) => comunidadController.crear(req, res));
+router.post('/', ...requireAuth, (req, res) => comunidadController.crear(req, res));
 
 // Endpoint de sincronización — sin autenticación (sistema externo)
 router.post('/sync', (req, res) => comunidadController.sync(req, res));
