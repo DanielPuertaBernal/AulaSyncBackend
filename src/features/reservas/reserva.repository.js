@@ -179,6 +179,7 @@ class ReservaRepository {
                 destinatario_nombre: reserva.solicitante_nombre,
                 destinatario_documento: reserva.solicitante_documento,
                 destinatario_correo: persona.correo,
+                numero_contacto_destinatario: persona.numero_contacto || '',
                 tipo_mensaje: 'predeterminado',
                 asunto: 'Reserva finalizada — Llave no reclamada - AulaSync',
                 salon: reserva.nombre_salon,

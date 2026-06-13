@@ -10,7 +10,10 @@ function getTransporter() {
       throw new Error('GMAIL_USER y GMAIL_APP_PASS no configuradas. Agregue las variables de entorno.');
     }
     _transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      family: 4,
       auth: {
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_APP_PASS,

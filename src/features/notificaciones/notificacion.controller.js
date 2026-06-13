@@ -47,6 +47,18 @@ class NotificacionController {
     const resultado = await notificacionService.reenviar(req.params.id);
     return res.json({ ok: true, data: resultado });
   }
+  /** POST /api/notificaciones/descartar/:id */
+  async descartar(req, res) {
+    const resultado = await notificacionService.descartar(req.params.id);
+    return res.json({ ok: true, data: resultado });
+  }
+
+  /** POST /api/notificaciones/descartar-por-reserva/:reservaId */
+  async descartarPorReserva(req, res) {
+    const resultado = await notificacionService.descartarPorReserva(req.params.reservaId);
+    return res.json({ ok: true, data: resultado });
+  }
+
   /** POST /api/notificaciones/reservas-manual */
   async enviarManualReservas(req, res) {
     const enviadoPor = req.user?.nombre || req.user?.usuario || 'desconocido';

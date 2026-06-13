@@ -19,13 +19,16 @@ const notificacionSchema = new mongoose.Schema(
     salon: { type: String, default: '' },
     tipo_notificacion: {
       type: String,
-      enum: ['manual', 'vencimiento_inicial', 'recordatorio', 'reserva_no_reclamada'],
+      enum: ['manual', 'vencimiento_inicial', 'recordatorio', 'reserva_no_reclamada', 'delegado_vencimiento', 'delegado_recordatorio'],
       default: 'manual',
     },
+    es_delegado: { type: Boolean, default: false },
+    nombre_docente_representado: { type: String, default: '' },
     numero_recordatorio: { type: Number, default: 0 },
+    numero_contacto_destinatario: { type: String, default: '' },
     estado_envio: {
       type: String,
-      enum: ['pendiente', 'enviado', 'fallido'],
+      enum: ['pendiente', 'enviado', 'fallido', 'descartado'],
       default: 'pendiente',
     },
     intentos_envio: { type: Number, default: 0 },

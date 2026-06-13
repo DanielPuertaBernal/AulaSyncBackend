@@ -17,7 +17,11 @@ const {
 const {
   reservaNoReclamadaTemplate,
 } = require('../../shared/email/templates/reserva-no-reclamada.template');
+const {
+  recordatorioDelegadoTemplate,
+} = require('../../shared/email/templates/recordatorio-delegado.template');
 const { createLogger } = require('../../shared/utils/logger');
+const { formatMinutos } = require('../../shared/utils/date.helper');
 
 const logger = createLogger('Notificaciones');
 
@@ -27,18 +31,8 @@ const MS_POR_MINUTO = 1000 * 60;
 const HORAS_POR_DIA = 24;
 
 function calcularTiempoTranscurrido(fechaEntrega) {
-  const ahora = new Date();
-  const entrega = new Date(fechaEntrega);
-  const diffMs = ahora - entrega;
-  const horas = Math.floor(diffMs / MS_POR_HORA);
-  const minutos = Math.floor((diffMs % MS_POR_HORA) / MS_POR_MINUTO);
-
-  if (horas >= HORAS_POR_DIA) {
-    const dias = Math.floor(horas / HORAS_POR_DIA);
-    const horasRestantes = horas % HORAS_POR_DIA;
-    return `${dias} día${dias > 1 ? 's' : ''} y ${horasRestantes}h`;
-  }
-  return `${horas}h ${minutos}min`;
+  const diffMs = new Date() - new Date(fechaEntrega);
+  return formatMinutos(Math.floor(diffMs / MS_POR_MINUTO));
 }
 
 function formatearFecha(fecha) {
@@ -178,6 +172,18 @@ class NotificacionService {
     }
   }
 
+  async descartar(id) {
+    const notif = await notificacionRepository.findById(id);
+    if (!notif) throw Object.assign(new Error('Notificación no encontrada'), { status: 404 });
+    return notificacionRepository.updateById(id, { estado_envio: 'descartado' });
+  }
+
+  async descartarPorReserva(reservaId) {
+    const notif = await notificacionRepository.findPendienteByReserva(reservaId);
+    if (!notif) throw Object.assign(new Error('No hay notificación pendiente para esta reserva'), { status: 404 });
+    return notificacionRepository.updateById(notif._id, { estado_envio: 'descartado' });
+  }
+
   /**
    * Verifica préstamos vencidos y encola notificaciones automáticas.
    * Usado por el scheduler.
@@ -259,9 +265,7 @@ class NotificacionService {
           registrosACrear.push(
             this._construirNotificacionAutomatica(prestamo, persona, config, 'vencimiento_inicial', 0, minutosTranscurridos)
           );
-        }
-
-        if (notifEnviadas < config.max_recordatorios) {
+        } else if (notifEnviadas < config.max_recordatorios) {
           const ultimaNotif = await notificacionRepository.findLastByPrestamo(prestamo._id);
           const minutosDesdeUltima = ultimaNotif
             ? (ahora - new Date(ultimaNotif.fecha_envio)) / (1000 * 60)
@@ -274,6 +278,35 @@ class NotificacionService {
                 notifEnviadas + 1, minutosTranscurridos
               )
             );
+          }
+        }
+
+        // Si la llave fue recibida por otra persona, notificarla también
+        if (prestamo.quien_reclama === 'otra_persona' && prestamo.numero_documento_reclama) {
+          const personaReclama = await comunidadRepository.findByDocumento(prestamo.numero_documento_reclama);
+          if (personaReclama?.correo) {
+            const notifDelegadoEnviadas = await notificacionRepository.countByPrestamoAndTipo(prestamo._id, 'delegado_recordatorio');
+            const tieneDelegadoVencimiento = await notificacionRepository.countByPrestamoAndTipo(prestamo._id, 'delegado_vencimiento');
+
+            if (!tieneDelegadoVencimiento) {
+              registrosACrear.push(
+                this._construirNotificacionDelegado(prestamo, persona, personaReclama, config, 'delegado_vencimiento', 0, minutosTranscurridos)
+              );
+            } else if (notifDelegadoEnviadas < config.max_recordatorios) {
+              const ultimaNotifDelegado = await notificacionRepository.findLastByPrestamoAndTipo(prestamo._id, 'delegado_recordatorio');
+              const minutosDesdeUltimaDelegado = ultimaNotifDelegado
+                ? (ahora - new Date(ultimaNotifDelegado.fecha_envio)) / (1000 * 60)
+                : config.intervalo_recordatorio_minutos + 1;
+
+              if (minutosDesdeUltimaDelegado >= config.intervalo_recordatorio_minutos) {
+                registrosACrear.push(
+                  this._construirNotificacionDelegado(
+                    prestamo, persona, personaReclama, config, 'delegado_recordatorio',
+                    notifDelegadoEnviadas + 1, minutosTranscurridos
+                  )
+                );
+              }
+            }
           }
         }
       } catch (err) {
@@ -322,6 +355,21 @@ class NotificacionService {
             fecha: notif.reserva_fecha || fechaFormateada,
             horaInicio: notif.reserva_hora_inicio || '',
             horaFin: notif.reserva_hora_fin || '',
+          });
+        } else if (notif.tipo_notificacion === 'delegado_recordatorio' || notif.tipo_notificacion === 'delegado_vencimiento') {
+          const salonDoc = await salonRepository.findByNombre(notif.salon || '');
+          const nombreBloqueNotif = salonDoc?.nombre_bloque || this._extraerBloque(notif.salon || '');
+          const configBloque = await configuracionService.obtenerPorBloque(nombreBloqueNotif);
+          htmlContent = recordatorioDelegadoTemplate({
+            nombreReclama: notif.destinatario_nombre,
+            nombreDocente: notif.nombre_docente_representado || '',
+            salon: notif.salon,
+            fechaPrestamo: fechaFormateada,
+            tiempoTranscurrido,
+            numeroRecordatorio: notif.numero_recordatorio || 1,
+            tiempoLimiteMinutos: configBloque.tiempo_maximo_prestamo_minutos,
+            horario: notif.horario_clase || '',
+            materia: notif.materia || '',
           });
         } else if (notif.tipo_notificacion === 'recordatorio' || notif.tipo_notificacion === 'vencimiento_inicial') {
           const salonDoc = await salonRepository.findByNombre(notif.salon || '');
@@ -464,6 +512,30 @@ class NotificacionService {
     return { enviados, fallidos, sin_correo: sinCorreo, total: reservas.length, detalle: resultados };
   }
 
+  _construirNotificacionDelegado(prestamo, personaDocente, personaReclama, config, tipo, numero, minutosTranscurridos) {
+    return {
+      destinatario_nombre: personaReclama.nombre,
+      destinatario_documento: prestamo.numero_documento_reclama,
+      destinatario_correo: personaReclama.correo,
+      tipo_mensaje: 'predeterminado',
+      asunto: tipo === 'delegado_vencimiento'
+        ? 'Llave prestada no devuelta — Representación docente - AulaSync'
+        : `Recordatorio #${numero} — Llave recibida en representación docente - AulaSync`,
+      salon: prestamo.aula || '',
+      prestamo_llave_id: prestamo._id,
+      tipo_notificacion: tipo,
+      numero_recordatorio: numero,
+      estado_envio: 'pendiente',
+      enviado_por: 'sistema',
+      fecha_envio: new Date(),
+      fecha_hora_prestamo: prestamo.fecha_hora_entrega || null,
+      horario_clase: prestamo.horario || '',
+      materia: prestamo.materia || '',
+      es_delegado: true,
+      nombre_docente_representado: personaDocente?.nombre || prestamo.docente || '',
+    };
+  }
+
   _construirNovedadDemora(prestamo, config, minutosTranscurridos) {
     return {
       tipo_recurso: 'llave',
@@ -473,7 +545,7 @@ class NotificacionService {
       reportado_por_nombre: prestamo.docente || '',
       salon: prestamo.aula || '',
       categoria: 'demora_entrega',
-      descripcion: `Llave del sal\u00f3n ${prestamo.aula || 'desconocido'} no devuelta tras ${config.max_recordatorios} recordatorio(s). Docente: ${prestamo.docente || prestamo.numero_documento}. Horario: ${prestamo.horario || 'No registrado'}. Materia: ${prestamo.materia || 'No especificada'}. Tiempo en mora: ${Math.round(minutosTranscurridos)} min.`,
+      descripcion: `Llave del sal\u00f3n ${prestamo.aula || 'desconocido'} no devuelta tras ${config.max_recordatorios} recordatorio(s). Docente: ${prestamo.docente || prestamo.numero_documento}. Horario: ${prestamo.horario || 'No registrado'}. Materia: ${prestamo.materia || 'No especificada'}. Tiempo en mora: ${formatMinutos(minutosTranscurridos)}.`,
       estado: 'abierta',
     };
   }
