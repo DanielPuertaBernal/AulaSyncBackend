@@ -292,24 +292,24 @@ class ReservasSemestralesService {
     const aulaNorm = normAula(nombre_salon);
     const regexDia = diaRegex(dia);
 
-    // Busca por aula normalizada (sin guiones) y dia con regex tolerante a tildes
-    const [progRegular, semestralesExistentes] = await Promise.all([
+    // Busca por día y semestre; filtra por aula en memoria para tolerar guiones (CO-401 vs CO401)
+    const [progTodosDia, semTodosDia] = await Promise.all([
       Programacion.find({
         tipo: 'programacion',
-        aula: new RegExp(`^${aulaNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
         dia: regexDia,
         semestre: codigoSemestre,
         ...(excluir_id ? { _id: { $ne: excluir_id } } : {}),
       }).lean(),
       Programacion.find({
         tipo: 'semestral',
-        aula: new RegExp(`^${aulaNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
         dia: regexDia,
         semestre: codigoSemestre,
         i_cancelada: { $ne: 1 },
         ...(excluir_grupo_id ? { grupo_id: { $ne: excluir_grupo_id } } : {}),
       }).lean(),
     ]);
+    const progRegular = progTodosDia.filter((p) => normAula(p.aula) === aulaNorm);
+    const semestralesExistentes = semTodosDia.filter((s) => normAula(s.aula) === aulaNorm);
 
     for (const p of progRegular) {
       if (p.hora_inicio && p.hora_fin && toMin(p.hora_inicio) < toMin(hora_fin) && toMin(p.hora_fin) > toMin(hora_inicio)) {
@@ -412,6 +412,13 @@ class ReservasSemestralesService {
 
     const persona = await comunidadRepository.findByDocumento(datos.solicitante_documento);
     const facultad = persona?.facultad || 'No aplica';
+
+    const toMinCheck = (t) => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + (m || 0); };
+    for (const franja of datos.franjas) {
+      if (franja.hora_inicio && franja.hora_fin && toMinCheck(franja.hora_fin) <= toMinCheck(franja.hora_inicio)) {
+        throw ApiError.badRequest(`Franja ${franja.dia}: la hora fin debe ser posterior a la hora inicio`);
+      }
+    }
 
     const conflictosPorFranja = [];
     for (const franja of datos.franjas) {
