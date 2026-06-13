@@ -3,7 +3,8 @@ const { ConfiguracionBloque } = require('./configuracion.schema');
 
 class ConfiguracionRepository {
   async findAll() {
-    return ConfiguracionBloque.find().sort({ nombre_bloque: 1 }).lean();
+    return ConfiguracionBloque.find({ nombre_bloque: { $ne: '__defaults__' } })
+      .sort({ nombre_bloque: 1 }).lean();
   }
 
   async findByBloque(nombreBloque) {

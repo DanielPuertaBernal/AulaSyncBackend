@@ -21,6 +21,10 @@ const entregarSchema = z.object({
   motivo: z.string().optional().default(''),
   ubicacion: ubicacionSchema.optional().default(UBICACIONES.OFICINA),
   origen: origenSchema.optional().default('individual'),
+  quien_reclama: z.enum(['docente', 'monitor', 'otra_persona', '']).optional().default('docente'),
+  numero_documento_reclama: z.string().optional().default(''),
+  nombre_reclama: z.string().optional().default(''),
+  numero_contacto: z.string().optional().default(''),
 });
 
 const procesarNFCSchema = z.object({

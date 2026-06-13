@@ -2,6 +2,7 @@
 const programacionRepository = require('./programacion.repository');
 const semestreRepository = require('./programacion.semestre.repository');
 const reservasSemestralesRepository = require('../reservas_semestrales/reservas_semestrales.repository');
+const llaveRepository = require('../llaves/llave.repository');
 const ApiError = require('../../shared/errors/api.error');
 const { parseExcel, cleanText, cleanDocumento, generateExcel, generateExcelMultiSheet } = require('../../shared/utils/excel.parser');
 const { getDiaActual, horaAMinutos } = require('../../shared/utils/date.helper');
@@ -107,21 +108,36 @@ class ProgramacionService {
       const vigente = await semestreRepository.findVigente();
       semestreFiltro = vigente?.codigo || null;
     }
-    const [todasClases, reservasSemestrales] = await Promise.all([
+
+    const hoy = new Date().toISOString().split('T')[0];
+    const [todasClases, reservasSemestrales, llavesHoy] = await Promise.all([
       programacionRepository.findByDia(diaFiltro, semestreFiltro),
       reservasSemestralesRepository.findByDia(diaFiltro, new Date()),
+      llaveRepository.findByFecha(hoy),
     ]);
+
+    // Set de docente+aula con llave entregada hoy
+    const entregadasHoy = new Set(
+      llavesHoy.map((l) => `${normalizeDocumento(l.numero_documento)}__${String(l.aula).toUpperCase()}`)
+    );
 
     const clases = todasClases.filter((clase) => {
       const doc = normalizeDocumento(clase.numero_documento);
       const horario = normalizeString(clase.horario);
-      const yaEntregada = clasesConLlave.some(
-        (c) => normalizeDocumento(c.documento) === doc && normalizeString(c.horario) === horario
-      );
-      return !yaEntregada;
+
+      // Filtro heredado (clasesConLlave del frontend, por compatibilidad)
+      if (clasesConLlave.some((c) => normalizeDocumento(c.documento) === doc && normalizeString(c.horario) === horario)) {
+        return false;
+      }
+
+      // Filtro principal: llave ya entregada hoy para este docente+aula
+      return !entregadasHoy.has(`${doc}__${String(clase.aula).toUpperCase()}`);
     });
 
-    return { clases, reservasSemestrales };
+    // Ocultar reservas semestrales cuya llave ya fue entregada
+    const reservasFiltradas = reservasSemestrales.filter((r) => !r.llave_entregada);
+
+    return { clases, reservasSemestrales: reservasFiltradas };
   }
 
   async exportar(semestre = null) {

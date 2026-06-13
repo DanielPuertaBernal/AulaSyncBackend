@@ -3,7 +3,7 @@ const configuracionRepository = require('./configuracion.repository');
 const bloqueRepository = require('../bloques/bloque.repository');
 const ApiError = require('../../shared/errors/api.error');
 
-const DEFAULTS = {
+const DEFAULTS_FALLBACK = {
   tiempo_maximo_prestamo_minutos: 120,
   intervalo_recordatorio_minutos: 30,
   max_recordatorios: 5,
@@ -22,16 +22,22 @@ class ConfiguracionService {
     return configuracionRepository.findAll();
   }
 
+  async obtenerDefaults() {
+    const stored = await configuracionRepository.findByBloque('__defaults__');
+    return stored || { nombre_bloque: '__defaults__', ...DEFAULTS_FALLBACK };
+  }
+
   async obtenerPorBloque(nombreBloque) {
     if (!nombreBloque) {
       return { nombre_bloque: '', ...DEFAULTS_SIN_BLOQUE };
     }
     const config = await configuracionRepository.findByBloque(nombreBloque);
-    return config || { nombre_bloque: nombreBloque, ...DEFAULTS };
+    if (config) return config;
+    return this.obtenerDefaults();
   }
 
-  async obtenerDefaults() {
-    return { ...DEFAULTS };
+  async guardarDefaults(data) {
+    return configuracionRepository.upsert('__defaults__', { nombre_bloque: '__defaults__', ...data });
   }
 
   async guardar(nombreBloque, data) {

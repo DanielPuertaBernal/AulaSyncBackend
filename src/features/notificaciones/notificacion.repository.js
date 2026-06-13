@@ -77,6 +77,20 @@ class NotificacionRepository {
       .lean();
   }
 
+  async findPendienteByReserva(reservaId) {
+    return Notificacion.findOne({
+      reserva_id: reservaId,
+      tipo_notificacion: 'reserva_no_reclamada',
+      estado_envio: 'pendiente',
+    }).lean();
+  }
+
+  async findLastByPrestamoAndTipo(prestamoLlaveId, tipo) {
+    return Notificacion.findOne({ prestamo_llave_id: prestamoLlaveId, tipo_notificacion: tipo })
+      .sort({ fecha_envio: -1 })
+      .lean();
+  }
+
   async findPendientesReintento(ahora) {
     return Notificacion.find({
       estado_envio: 'pendiente',
@@ -93,6 +107,7 @@ class NotificacionRepository {
     const ahora = new Date();
     return Notificacion.find({
       estado_envio: 'pendiente',
+      tipo_notificacion: { $ne: 'reserva_no_reclamada' },
       $or: [
         { proximo_reintento: null },
         { proximo_reintento: { $lte: ahora } },

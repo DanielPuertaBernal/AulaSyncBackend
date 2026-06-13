@@ -6,6 +6,23 @@
 const DIAS_ES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
 /**
+ * Formatea una cantidad de minutos en texto legible (min / h min / d h min)
+ * @param {number} minutos
+ * @returns {string} Ej: "45min", "2h 15min", "3d 8h 33min"
+ */
+function formatMinutos(minutos) {
+  const total = Math.max(0, Math.round(minutos));
+  const dias = Math.floor(total / 1440);
+  const horas = Math.floor((total % 1440) / 60);
+  const mins = total % 60;
+  const partes = [];
+  if (dias > 0) partes.push(`${dias}d`);
+  if (horas > 0) partes.push(`${horas}h`);
+  if (mins > 0 || partes.length === 0) partes.push(`${mins}min`);
+  return partes.join(' ');
+}
+
+/**
  * Retorna el nombre del día actual en español
  * @returns {string} Ej: "Lunes"
  */
@@ -69,7 +86,7 @@ function calcularRetrasoDevolucion(horario, fechaEntrega, ahora = new Date()) {
 
     if (minutosAhora > umbralMinutos) {
       const retrasoMin = minutosAhora - horaFin;
-      return `${Math.floor(retrasoMin / 60)}h ${retrasoMin % 60}min`;
+      return formatMinutos(retrasoMin);
     }
     return '';
   } catch {
@@ -88,7 +105,7 @@ function calcularDuracion(fechaEntrega, ahora = new Date()) {
     if (!fechaEntrega) return '';
     const diffMs = ahora - fechaEntrega;
     const diffMin = Math.floor(diffMs / 60000);
-    return `${Math.floor(diffMin / 60)}h ${diffMin % 60}min`;
+    return formatMinutos(diffMin);
   } catch {
     return '';
   }
@@ -146,8 +163,8 @@ function calcularDuracionClase(horario, fechaDevolucion = new Date()) {
     if (horaInicio === null) return '';
     const minutosDevolucion = fechaDevolucion.getHours() * 60 + fechaDevolucion.getMinutes();
     const diffMin = minutosDevolucion - horaInicio;
-    if (diffMin <= 0) return '0h 0min';
-    return `${Math.floor(diffMin / 60)}h ${diffMin % 60}min`;
+    if (diffMin <= 0) return '0min';
+    return formatMinutos(diffMin);
   } catch {
     return '';
   }
@@ -169,7 +186,7 @@ function calcularTiempoRetraso(horario, ahora = new Date()) {
     const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
     const diff = minutosAhora - horaInicio;
     if (diff <= 0) return '';
-    return `${Math.floor(diff / 60)}h ${diff % 60}min`;
+    return formatMinutos(diff);
   } catch {
     return '';
   }
@@ -179,6 +196,7 @@ module.exports = {
   getDiaActual,
   getFechaHoy,
   horaAMinutos,
+  formatMinutos,
   calcularRetrasoDevolucion,
   calcularDuracion,
   calcularDuracionClase,

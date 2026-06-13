@@ -163,6 +163,18 @@ router.post(
   (req, res) => notificacionController.reenviar(req, res)
 );
 
+router.post(
+  '/descartar/:id',
+  ...requireAuth,
+  (req, res) => notificacionController.descartar(req, res)
+);
+
+router.post(
+  '/descartar-por-reserva/:reservaId',
+  ...requireAuth,
+  (req, res) => notificacionController.descartarPorReserva(req, res)
+);
+
 const enviarReservasManualSchema = z.object({
   reserva_ids: z.array(z.string().min(1)).min(1, 'Debe indicar al menos una reserva'),
   tipo_mensaje: z.enum(['predeterminado', 'personalizado']).default('predeterminado'),
