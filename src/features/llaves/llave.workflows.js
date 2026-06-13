@@ -322,7 +322,21 @@ function createLlaveWorkflows({
       origenRegistro,
     });
 
-    const created = await createRegistro(registro);
+    // Fecha del día sin hora para el índice único de prevención de duplicados
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    registro.dia_entrega = hoy;
+
+    let created;
+    try {
+      created = await createRegistro(registro);
+    } catch (err) {
+      if (err.code === 11000) {
+        throw ApiError.conflict('La llave de este salón ya está en préstamo hoy');
+      }
+      throw err;
+    }
+
     return {
       ok: true,
       mensaje: `Llave entregada a ${infoClase.profesor}`,

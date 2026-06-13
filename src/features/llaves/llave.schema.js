@@ -23,7 +23,7 @@ const llaveSchema = new mongoose.Schema(
     ubicacion_prestamo: { type: String, default: '' },
     ubicacion_devolucion: { type: String, default: '' },
     // Quién reclamó la llave
-    quien_reclama: { type: String, enum: ['docente', 'monitor', ''], default: '' },
+    quien_reclama: { type: String, enum: ['docente', 'monitor', 'otra_persona', ''], default: '' },
     numero_documento_reclama: { type: String, default: '' },
     nombre_reclama: { type: String, default: '' },
     // Quién devolvió la llave
@@ -37,11 +37,19 @@ const llaveSchema = new mongoose.Schema(
       default: 'en_prestamo',
       index: true,
     },
+    // Fecha del día (sin hora) — usada para el índice único de prevención de duplicados
+    dia_entrega: { type: Date, default: null, index: true },
   },
   {
     collection: 'registros_llaves',
     versionKey: false,
   }
+);
+
+// Previene entregar la misma llave dos veces el mismo día (race condition)
+llaveSchema.index(
+  { numero_documento: 1, aula: 1, dia_entrega: 1 },
+  { unique: true, sparse: true }
 );
 
 const Llave = mongoose.model('Llave', llaveSchema);

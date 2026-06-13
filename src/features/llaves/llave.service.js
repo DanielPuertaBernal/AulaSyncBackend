@@ -90,6 +90,21 @@ class LlaveService {
     return pendientes.map((p) => ({ ...p, correo: correoMap.get(p.documento) || '' }));
   }
 
+  async #enriquecerConDatosReclama(registros) {
+    const documentos = [...new Set(registros.map((r) => r.documentoReclama).filter(Boolean))];
+    if (!documentos.length) return registros;
+    const personas = await comunidadRepository.findManyByDocumentos(documentos);
+    const map = new Map(personas.map((p) => [p.numero_documento, p]));
+    return registros.map((r) => {
+      const persona = map.get(r.documentoReclama);
+      return {
+        ...r,
+        correoReclama: persona?.correo || '',
+        numeroContactoReclama: persona?.numero_contacto || '',
+      };
+    });
+  }
+
   async obtenerPendientes() {
     const raw = await llaveRepository.findPendientes();
     const pendientes = await formatearPendientes(raw, formatRegistroLlave);
@@ -107,7 +122,11 @@ class LlaveService {
   }
 
   async obtenerHistorial(filters = {}, pagination = null) {
-    return obtenerHistorialFormateado(filters, pagination, formatRegistroLlave);
+    const resultado = await obtenerHistorialFormateado(filters, pagination, formatRegistroLlave);
+    if (pagination) {
+      return { ...resultado, data: await this.#enriquecerConDatosReclama(resultado.data) };
+    }
+    return this.#enriquecerConDatosReclama(Array.isArray(resultado) ? resultado : resultado.data || resultado);
   }
 
   async obtenerClasesProcesadasHoy() {
