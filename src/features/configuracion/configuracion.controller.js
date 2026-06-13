@@ -18,6 +18,11 @@ class ConfiguracionController {
     return res.json({ ok: true, data: { defaults } });
   }
 
+  async guardarDefaults(req, res) {
+    const config = await configuracionService.guardarDefaults(req.body);
+    return res.json({ ok: true, data: { defaults: config } });
+  }
+
   async guardar(req, res) {
     const { bloque } = req.params;
     const config = await configuracionService.guardar(bloque, req.body);

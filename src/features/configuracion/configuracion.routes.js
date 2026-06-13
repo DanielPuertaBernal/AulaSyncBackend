@@ -72,6 +72,10 @@ router.get('/', ...requireAuth, (req, res) => configuracionController.listar(req
  */
 router.get('/defaults', ...requireAuth, (req, res) => configuracionController.defaults(req, res));
 
+router.put('/defaults', ...requireAdmin, validate(guardarSchema), (req, res) =>
+  configuracionController.guardarDefaults(req, res)
+);
+
 /**
  * @openapi
  * /configuracion/{bloque}:
